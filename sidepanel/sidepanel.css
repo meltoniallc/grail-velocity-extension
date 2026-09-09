@@ -1,0 +1,5 @@
+html, body.panel {
+  width: 100%;
+  min-height: 100vh;
+}
+body.panel ul { max-height: none; }

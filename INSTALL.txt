@@ -1,0 +1,11 @@
+Grail Velocity — load this folder, not the zip, not the Grok workspace.
+
+1. Unzip grail-velocity-extension.zip
+2. You should see a folder named grail-velocity
+3. Open that folder. You MUST see manifest.json sitting in it (same level as background.js)
+4. Chrome → chrome://extensions
+5. Developer mode ON (top right)
+6. Load unpacked → select the grail-velocity folder
+   Do NOT select Downloads, the zip, or anything named grok-workspace
+7. Pin Grail Velocity. Stay signed into eBay.
+8. Popup → first High-conf cut → Sold tab → Apply Fast-Cash on Revise
