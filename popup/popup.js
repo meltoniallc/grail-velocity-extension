@@ -49,9 +49,9 @@ function soldQuery(title) {
 
 function esc(s) {
   return String(s ?? "")
-    .replace(/&/g, "&")
-    .replace(/</g, "<")
-    .replace(/"/g, """);
+    .replace(/&/g, "\u0026amp;")
+    .replace(/</g, "\u0026lt;")
+    .replace(/"/g, "\u0026quot;");
 }
 
 document.getElementById("search").addEventListener("submit", (e) => {

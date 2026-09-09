@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Grail Velocity",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Meltonia operator desk on eBay. Reads sold tape as you. Writes Fast-Cash on revise.",
   "permissions": ["storage", "activeTab", "sidePanel", "scripting"],
   "host_permissions": ["https://*.ebay.com/*"],

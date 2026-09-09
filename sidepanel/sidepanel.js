@@ -31,9 +31,9 @@ function paint(list) {
 
 function esc(s) {
   return String(s ?? "")
-    .replace(/&/g, "&")
-    .replace(/</g, "<")
-    .replace(/"/g, """);
+    .replace(/&/g, "\u0026amp;")
+    .replace(/</g, "\u0026lt;")
+    .replace(/"/g, "\u0026quot;");
 }
 
 document.getElementById("cuts").addEventListener("click", (e) => {
