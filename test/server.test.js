@@ -64,6 +64,13 @@ test("tape server parks noise in sqlite and does not require postgres", async ()
     assert.equal(res.status, 200, JSON.stringify(body));
     assert.equal(body.scratch, "sqlite");
     assert.equal(body.postgres.skipped, "no-postgres");
+    const denied = await fetch(`http://127.0.0.1:${port}/ping`);
+    assert.equal(denied.status, 401);
+    const ping = await fetch(`http://127.0.0.1:${port}/ping`, {
+      headers: { "X-Tape-Secret": "test-secret" },
+    });
+    assert.equal(ping.status, 200);
+    assert.equal((await ping.json()).ok, true);
     const { DatabaseSync } = require("node:sqlite");
     const db = new DatabaseSync(sqlite);
     const rows = db.prepare("SELECT title FROM raw_listings").all();

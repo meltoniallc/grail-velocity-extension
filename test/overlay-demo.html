@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>eBay search — overlay demo</title>
+    <style>
+      body { margin: 0 380px 0 0; font: 16px/1.4 system-ui; background: #f5f5f5; }
+      h1 { font-size: 18px; padding: 16px; }
+      .s-item { display: flex; justify-content: space-between; gap: 16px; padding: 12px 16px; border-bottom: 1px solid #ddd; background: #fff; }
+      .s-item__title { margin: 0; font-size: 14px; }
+      .s-item__price { font-weight: 600; }
+      .s-item__caption { color: #666; font-size: 12px; }
+    </style>
+  </head>
+  <body>
+    <h1 id="query-title">2023-24 Topps Mercury Victor Wembanyama #5 Refractor 74/99</h1>
+    <ul>
+      <li class="s-item" data-gv-id="1" data-gv-price="120">
+        <a class="s-item__link" href="https://www.ebay.com/itm/111"><h3 class="s-item__title">2023-24 Topps Mercury Victor Wembanyama #5 Refractor 11/99</h3></a>
+        <span class="s-item__price">$120.00</span>
+        <span class="s-item__caption"></span>
+      </li>
+      <li class="s-item" data-gv-id="2" data-gv-price="110">
+        <a class="s-item__link" href="https://www.ebay.com/itm/222"><h3 class="s-item__title">2023-24 Topps Mercury Victor Wembanyama #5 Refractor 22/99</h3></a>
+        <span class="s-item__price">$110.00</span>
+        <span class="s-item__caption"></span>
+      </li>
+      <li class="s-item" data-gv-id="3" data-gv-price="9">
+        <a class="s-item__link" href="https://www.ebay.com/itm/333"><h3 class="s-item__title">2023 Panini Prizm Victor Wembanyama #5 Silver</h3></a>
+        <span class="s-item__price">$9.00</span>
+        <span class="s-item__caption"></span>
+      </li>
+    </ul>
+    <script>
+      const sold = new URLSearchParams(location.search).get("LH_Sold") === "1";
+      document.title = sold ? "Sold listings" : "Active listings";
+      if (sold) {
+        document.querySelectorAll(".s-item__caption").forEach((el, i) => {
+          el.textContent = "Sold Jan " + (i + 2) + ", 2026";
+        });
+      }
+      const memory = { snapshots: [], scratch: [], catalog: [], catalogAt: Date.now() };
+      window.chrome = {
+        runtime: {
+          getURL(path) {
+            return new URL("../" + path, location.href).href;
+          },
+          async sendMessage(msg) {
+            if (msg.type === "GV_SUGGEST") return { hits: [] };
+            if (msg.type === "GV_TAPE_GET") {
+              const snap = memory.snapshots.find((s) => s.query === msg.query) || null;
+              return { snapshot: snap };
+            }
+            if (msg.type === "GV_TAPE_PUT") {
+              const snapshot = globalThis.GVTape.create({
+                async load() {
+                  return { snapshots: memory.snapshots, scratch: memory.scratch };
+                },
+                async saveSnapshots(snapshots) {
+                  memory.snapshots = snapshots;
+                },
+                async saveScratch(scratch) {
+                  memory.scratch = scratch;
+                },
+              }).putScan({
+                query: msg.query,
+                verified: msg.verified,
+                velocity: msg.velocity,
+                url: location.href,
+              });
+              return { snapshot: await snapshot };
+            }
+            return {};
+          },
+          onMessage: { addListener() {} },
+        },
+        storage: {
+          local: {
+            async get() {
+              return memory;
+            },
+            async set(patch) {
+              Object.assign(memory, patch);
+            },
+          },
+        },
+      };
+    </script>
+    <script src="../lib/core.js"></script>
+    <script src="../lib/tape.js"></script>
+    <script src="../content/ebay.js"></script>
+  </body>
+</html>

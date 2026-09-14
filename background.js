@@ -97,5 +97,44 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     })();
     return true;
   }
+  if (msg?.type === "GV_TAPE_PING") {
+    (async () => {
+      const settings = await chrome.storage.local.get(["tapeApi", "tapeSecret"]);
+      const endpoint = String(settings.tapeApi || "").replace(/\/+$/, "");
+      if (!endpoint) {
+        sendResponse({ ok: false, error: "Set Tape API first. Default is http://127.0.0.1:8787." });
+        return;
+      }
+      try {
+        const healthRes = await fetch(`${endpoint}/health`);
+        const health = await healthRes.json().catch(() => ({}));
+        if (!healthRes.ok || !health.ok) {
+          sendResponse({ ok: false, error: "Tape API answered but is not healthy." });
+          return;
+        }
+        const headers = {};
+        if (settings.tapeSecret) headers["X-Tape-Secret"] = String(settings.tapeSecret);
+        const pingRes = await fetch(`${endpoint}/ping`, { headers });
+        if (pingRes.status === 401) {
+          sendResponse({
+            ok: false,
+            error: "Secret does not match. Copy the value printed in the npm run tape terminal, paste it here, Save, then check again.",
+          });
+          return;
+        }
+        if (!pingRes.ok) {
+          sendResponse({ ok: false, error: `Tape API returned ${pingRes.status}.` });
+          return;
+        }
+        sendResponse({ ok: true, postgres: Boolean(health.postgres) });
+      } catch {
+        sendResponse({
+          ok: false,
+          error: "Tape API is not running. In the grail-velocity folder (package.json is there): npm run tape",
+        });
+      }
+    })();
+    return true;
+  }
   return false;
 });

@@ -1,19 +1,10 @@
-Grail Velocity — load this folder, not the zip, not the Grok workspace.
-
-STATUS: v1.1.0 — high-match tape, relevance cliff, instant typeahead.
-
-[x] Ship MV3 overlay (manifest in this folder)
-[x] Keep only verified title matches; stop at the eBay relevance cliff
-[x] Instant character-by-character tape from retained prices
-[x] Optional tape server: Postgres for prices, SQLite for rejected noise
+Grail Velocity v1.2.1 — Fast-Cash is sold tape only.
 
 1. Unzip grail-velocity-extension.zip
-2. You should see a folder named grail-velocity
-3. Open that folder. You MUST see manifest.json sitting in it (same level as background.js)
-4. Chrome → chrome://extensions
-5. Developer mode ON (top right)
-6. Load unpacked → select the grail-velocity folder
-   Do NOT select Downloads, the zip, or anything named grok-workspace
-7. Pin Grail Velocity. Stay signed into eBay.
-8. Popup → type a card (tape answers as you type) or open a High-conf cut → Sold tab → Apply Fast-Cash on Revise
-9. Optional: npm run tape with DATABASE_URL, then Options → Tape API http://127.0.0.1:8787
+2. Open the grail-velocity folder. manifest.json must sit next to background.js
+3. chrome://extensions → Developer mode ON → Load unpacked → that folder
+   Not the zip. Not grok-workspace. Not Downloads.
+4. Pin it. Stay signed into eBay.
+5. Sold + Completed search → overlay → Scrape solds.
+   Chip must say TAPE before you Apply.
+6. Book ref is catalog, not this page. Do not apply it.
