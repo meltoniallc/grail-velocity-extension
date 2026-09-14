@@ -16,13 +16,14 @@ function paint(list) {
     .slice(0, 40)
     .map((i) => {
       const gap = (i.listPrice || 0) - (i.fastCash || 0);
+      const q = i.query || i.title;
       return `<li>
-        <button class="row" type="button" data-q="${esc(i.title)}">
+        <button class="row" type="button" data-q="${esc(q)}">
           <div>
             <div class="title">${esc(i.title)}</div>
-            <div class="meta">${esc(i.id)} · ${i.confidence || "—"} · ${GV.money(i.listPrice)} → ${GV.money(i.fastCash)}</div>
+            <div class="meta">${esc(i.id || i.kind || "—")} · ${i.nKept ? i.nKept + " kept" : i.confidence || "—"} · ${GV.money(i.listPrice)} → ${GV.money(i.fastCash)}</div>
           </div>
-          <div class="gap">${GV.money(gap)}</div>
+          <div class="gap">${i.kind === "tape" ? GV.money(i.fastCash) : GV.money(gap)}</div>
         </button>
       </li>`;
     })
@@ -36,6 +37,41 @@ function esc(s) {
     .replace(/"/g, "\u0026quot;");
 }
 
+function rank(list) {
+  return list
+    .filter((i) => i.listPrice && i.fastCash)
+    .sort((a, b) => b.listPrice - b.fastCash - (a.listPrice - a.fastCash));
+}
+
+let typeGen = 0;
+
+async function onTyped() {
+  const q = document.getElementById("q").value.trim();
+  const gen = (typeGen += 1);
+  if (q.length < 1) {
+    paint(rank(items));
+    return;
+  }
+  try {
+    const res = await chrome.runtime.sendMessage({ type: "GV_SUGGEST", q });
+    if (gen !== typeGen) return;
+    if (res?.hits?.length) {
+      paint(res.hits);
+      return;
+    }
+  } catch {
+    /* book fallback */
+  }
+  if (gen !== typeGen) return;
+  const tok = GV.tokenize(q);
+  const hits = items
+    .map((item) => ({ item, score: GV.overlapScore(tok, `${item.title} ${item.player || ""}`) }))
+    .filter((x) => x.score > 0.18)
+    .sort((a, b) => b.score - a.score)
+    .map((x) => x.item);
+  paint(hits);
+}
+
 document.getElementById("cuts").addEventListener("click", (e) => {
   const btn = e.target.closest("[data-q]");
   if (!btn) return;
@@ -45,27 +81,17 @@ document.getElementById("cuts").addEventListener("click", (e) => {
 document.getElementById("search").addEventListener("submit", (e) => {
   e.preventDefault();
   const q = document.getElementById("q").value.trim();
-  if (q.length < 2) {
-    paint(rank(items));
-    return;
-  }
-  const tok = GV.tokenize(q);
-  const hits = items
-    .map((item) => ({ item, score: GV.overlapScore(tok, `${item.title} ${item.player || ""}`) }))
-    .filter((x) => x.score > 0.18)
-    .sort((a, b) => b.score - a.score)
-    .map((x) => x.item);
-  paint(hits);
+  if (q.length < 2) return;
   chrome.runtime.sendMessage({ type: "GV_SOLD", query: q });
 });
 
-function rank(list) {
-  return list
-    .filter((i) => i.listPrice && i.fastCash)
-    .sort((a, b) => b.listPrice - b.fastCash - (a.listPrice - a.fastCash));
+document.getElementById("q").addEventListener("input", () => {
+  onTyped();
+});
+
+async function initPanel() {
+  items = await catalog();
+  paint(rank(items));
 }
 
-catalog().then((data) => {
-  items = data;
-  paint(rank(items));
-});
+initPanel();

@@ -1,10 +1,11 @@
 Grail Velocity — load this folder, not the zip, not the Grok workspace.
 
-STATUS: COMPLETE — MV3 overlay shipped (v1.0.1). Release zip + load-unpacked path below.
+STATUS: v1.1.0 — high-match tape, relevance cliff, instant typeahead.
 
 [x] Ship MV3 overlay (manifest in this folder)
-[x] Publish grail-velocity-extension.zip on GitHub Releases (latest → v1.0.1)
-[x] Document load unpacked + Fast-Cash on Revise
+[x] Keep only verified title matches; stop at the eBay relevance cliff
+[x] Instant character-by-character tape from retained prices
+[x] Optional tape server: Postgres for prices, SQLite for rejected noise
 
 1. Unzip grail-velocity-extension.zip
 2. You should see a folder named grail-velocity
@@ -14,4 +15,5 @@ STATUS: COMPLETE — MV3 overlay shipped (v1.0.1). Release zip + load-unpacked p
 6. Load unpacked → select the grail-velocity folder
    Do NOT select Downloads, the zip, or anything named grok-workspace
 7. Pin Grail Velocity. Stay signed into eBay.
-8. Popup → first High-conf cut → Sold tab → Apply Fast-Cash on Revise
+8. Popup → type a card (tape answers as you type) or open a High-conf cut → Sold tab → Apply Fast-Cash on Revise
+9. Optional: npm run tape with DATABASE_URL, then Options → Tape API http://127.0.0.1:8787

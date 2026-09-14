@@ -12,10 +12,11 @@
       <h1>Grail Velocity</h1>
     </header>
     <form id="search">
-      <input id="q" type="search" placeholder="Year, set, player, parallel" autocomplete="off" />
+      <input id="q" type="search" placeholder="Type year, set, player — instant tape" autocomplete="off" />
       <button type="submit">Sold tape</button>
     </form>
-    <p class="sec">High-conf cuts</p>
+    <ul id="suggest" hidden></ul>
+    <p class="sec" id="sec">High-conf cuts</p>
     <ul id="cuts"></ul>
     <footer>
       <button type="button" id="read">Read this tab</button>
