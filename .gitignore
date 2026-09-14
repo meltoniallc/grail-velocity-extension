@@ -4,3 +4,5 @@ data/
 *.sqlite
 *.sqlite-journal
 .DS_Store
+.playwright-mcp/
+.cursor/hooks/state/
