@@ -126,3 +126,24 @@ test("scoreVelocity never prices live asks, even when they match tighter than so
   assert.equal(liveOnly.action, "QUARANTINE");
   assert.deepEqual(GV.soldVerified([...sold, ...live]).map((r) => r.price), [120, 110]);
 });
+
+test("cashFromTape never uses catalog book Fast-Cash", () => {
+  const empty = GV.scoreVelocity({
+    verified: [
+      {
+        id: "live",
+        title: "2023-24 Topps Mercury Victor Wembanyama #5 Refractor 11/99",
+        price: 445,
+        keep: true,
+        kind: "active",
+        matchScore: 0.94,
+      },
+    ],
+  });
+  assert.equal(empty.fastCashPrice, null);
+  const cash = GV.cashFromTape(empty);
+  assert.equal(cash.value, null);
+  assert.equal(cash.source, "none");
+  const sku = { fastCash: 114.99, listPrice: 875 };
+  assert.notEqual(sku.fastCash, cash.value);
+});

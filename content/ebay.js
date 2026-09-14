@@ -125,7 +125,9 @@
       return;
     }
     host.style.cssText = panelStyle();
-    const fast = velocity?.fastCashPrice ?? sku?.fastCash ?? null;
+    const cash = GV.cashFromTape(velocity);
+    const fast = cash.value;
+    const bookRef = sku?.fastCash ?? null;
     const listed = sku?.listPrice ?? (pageMode === "sold" ? null : pageRows.find((row) => row.keep)?.price) ?? null;
     const gap = listed != null && fast != null ? listed - fast : null;
     const action = (velocity?.action || "QUARANTINE").toLowerCase();
@@ -187,8 +189,13 @@
               ? `<p class="gv-note">Live/listing asks stay off the sold tape. Fast-Cash only moves after sold comps exist.</p>`
               : ""
           }
-          <p class="gv-kicker" style="margin-top:12px">Fast-Cash</p>
+          <p class="gv-kicker" style="margin-top:12px">Fast-Cash <span class="gv-src">${fast != null ? "TAPE" : "NO TAPE"}</span></p>
           <p class="gv-fast">${GV.money(fast)}</p>
+          ${
+            bookRef != null
+              ? `<p class="gv-id" style="margin-top:4px">Book ref ${GV.money(bookRef)} — catalog, not this page. Do not apply.</p>`
+              : ""
+          }
           <p class="gv-id" style="margin-top:4px">${kept.length ? matchPct(avg) + " match on this page" : "Nothing scraped yet"}</p>
           <dl class="gv-dl">
             <div><dt>Listed</dt><dd class="gv-danger">${GV.money(listed)}</dd></div>
@@ -349,7 +356,7 @@
       return;
     }
     if (act === "apply") {
-      const fast = velocity?.fastCashPrice ?? sku?.fastCash;
+      const fast = GV.cashFromTape(velocity).value;
       if (fast == null) return;
       const ok = GV.applyPrice(fast);
       applied = fast;
@@ -370,7 +377,7 @@
       return;
     }
     if (act === "copy") {
-      const fast = velocity?.fastCashPrice ?? sku?.fastCash;
+      const fast = GV.cashFromTape(velocity).value;
       if (fast != null) navigator.clipboard?.writeText(Number(fast).toFixed(2));
       return;
     }

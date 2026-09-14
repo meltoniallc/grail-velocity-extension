@@ -146,6 +146,16 @@
 .gv-drop { color: var(--subtle); text-decoration: line-through; }
 .gv-price { font-family: ui-monospace, Menlo, monospace; font-size: 12px; font-variant-numeric: tabular-nums; flex-shrink: 0; }
 .gv-sec { margin: 24px 0 0; font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.gv-src {
+  display: inline-flex;
+  margin-left: 8px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  color: var(--ok);
+  background: rgba(122,154,124,.15);
+}
 .gv-type { margin: 0 0 8px; }
 .gv-type input {
   width: 100%;

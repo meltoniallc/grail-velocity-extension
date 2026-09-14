@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Grail Velocity",
-  "version": "1.1.1",
-  "description": "Meltonia operator desk on eBay. Scrape any tab. Fast-Cash from sold tape only.",
+  "version": "1.2.1",
+  "description": "Meltonia operator desk on eBay. Fast-Cash is sold tape only — never the book.",
   "permissions": ["storage", "tabs", "sidePanel", "scripting"],
   "host_permissions": [
     "https://*.ebay.com/*",
