@@ -3,7 +3,8 @@
   "private": true,
   "scripts": {
     "test": "node --test test/*.test.js",
-    "tape": "node server/index.js"
+    "tape": "node server/index.js",
+    "load-extension": "node scripts/load-extension.js"
   },
   "dependencies": {
     "pg": "^8.16.3"
