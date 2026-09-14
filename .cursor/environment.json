@@ -1,0 +1,12 @@
+{
+  "name": "Grail Velocity",
+  "install": "npm install",
+  "terminals": [
+    {
+      "name": "tape-server",
+      "command": "npm run tape"
+    }
+  ],
+  "ports": [8787],
+  "chromeExecutablePath": "/usr/bin/google-chrome-stable"
+}
