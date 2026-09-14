@@ -3,11 +3,16 @@
 const http = require("node:http");
 const path = require("node:path");
 const { openScratch, writeScratch, writePostgres, suggestPostgres } = require("./store");
+const { resolveSecret } = require("./secret");
 
 const PORT = Number(process.env.PORT || 8787);
 const SQLITE_PATH = process.env.SQLITE_PATH || path.join(__dirname, "..", "data", "scratch.sqlite");
 const DATABASE_URL = process.env.DATABASE_URL || "";
-const TAPE_SECRET = process.env.TAPE_SECRET || "";
+const secretInfo = resolveSecret({
+  env: process.env,
+  filePath: path.join(__dirname, "..", "data", "tape.secret"),
+});
+const TAPE_SECRET = secretInfo.secret;
 
 let pool = null;
 if (DATABASE_URL) {
@@ -63,11 +68,16 @@ const server = http.createServer(async (req, res) => {
         ok: true,
         postgres: Boolean(pool),
         sqlite: SQLITE_PATH,
+        secret: Boolean(TAPE_SECRET),
       });
       return;
     }
     if (unauthorized(req)) {
       send(res, 401, { ok: false, error: "bad tape secret" });
+      return;
+    }
+    if (req.method === "GET" && url.pathname === "/ping") {
+      send(res, 200, { ok: true, postgres: Boolean(pool) });
       return;
     }
     if (req.method === "GET" && url.pathname === "/suggest") {
@@ -97,7 +107,7 @@ if (require.main === module) {
     const addr = server.address();
     const port = typeof addr === "object" && addr ? addr.port : PORT;
     process.stderr.write(
-      `Grail Velocity tape on http://127.0.0.1:${port} (postgres ${pool ? "on" : "off"}, sqlite ${SQLITE_PATH})\n`,
+      `Grail Velocity tape on http://127.0.0.1:${port} (postgres ${pool ? "on" : "off"}, sqlite ${SQLITE_PATH})\nPaste this secret in Grail Velocity Options:\n${TAPE_SECRET}\n(source: ${secretInfo.source}, file: ${secretInfo.filePath})\nThen: Tape API http://127.0.0.1:${port} → Save → Check connection.\n`,
     );
   });
 }

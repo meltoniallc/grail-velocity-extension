@@ -1,11 +1,12 @@
 Grail Velocity — load this folder, not the zip, not the Grok workspace.
 
-STATUS: v1.1.0 — high-match tape, relevance cliff, instant typeahead.
+STATUS: v1.1.1 — scrape on every eBay tab; Fast-Cash from sold tape only.
 
 [x] Ship MV3 overlay (manifest in this folder)
 [x] Keep only verified title matches; stop at the eBay relevance cliff
 [x] Instant character-by-character tape from retained prices
-[x] Optional tape server: Postgres for prices, SQLite for rejected noise
+[x] Scrape this page on live search, solds, and listings
+[x] Optional tape server: Postgres for sold prices, SQLite for rejected + live asks
 
 1. Unzip grail-velocity-extension.zip
 2. You should see a folder named grail-velocity
@@ -15,5 +16,7 @@ STATUS: v1.1.0 — high-match tape, relevance cliff, instant typeahead.
 6. Load unpacked → select the grail-velocity folder
    Do NOT select Downloads, the zip, or anything named grok-workspace
 7. Pin Grail Velocity. Stay signed into eBay.
-8. Popup → type a card (tape answers as you type) or open a High-conf cut → Sold tab → Apply Fast-Cash on Revise
-9. Optional: npm run tape with DATABASE_URL, then Options → Tape API http://127.0.0.1:8787
+8. Any eBay tab → overlay → Scrape this page. Popup footer is the same button.
+   Live search lists high-match asks. Fast-Cash still needs sold comps (Open solds).
+9. Optional tape server: in this folder run `npm run tape`. It prints the secret.
+   Options → paste secret → Tape API http://127.0.0.1:8787 → Check connection.

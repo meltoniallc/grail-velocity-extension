@@ -6,12 +6,18 @@
     <title>Grail Velocity tape</title>
     <link rel="stylesheet" href="../popup/popup.css" />
     <style>
-      body { width: 420px; padding-bottom: 16px; }
+      body { width: 440px; padding-bottom: 16px; }
       label { display: block; margin: 12px 16px 4px; font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); }
       p.help { margin: 8px 16px 0; font-size: 12px; color: var(--subtle); line-height: 1.45; }
       #opts { padding: 0 16px 16px; display: grid; gap: 8px; }
       #opts input { width: 100%; }
-      #status { margin: 0; font-size: 12px; color: var(--ok); min-height: 1.2em; }
+      .row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+      .row3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+      #opts button.secondary { background: var(--raised); color: var(--fg); }
+      #status { margin: 0; font-size: 12px; color: var(--muted); min-height: 1.2em; line-height: 1.45; }
+      #status.ok { color: var(--ok); }
+      #status.bad { color: var(--danger); }
+      code { font-family: ui-monospace, Menlo, monospace; font-size: 11px; }
     </style>
   </head>
   <body>
@@ -19,13 +25,21 @@
       <p class="kicker">Options</p>
       <h1>Tape store</h1>
     </header>
-    <p class="help">Verified prices stay in the extension for instant typeahead. Optionally sync them to Postgres and park rejected titles in SQLite via the local tape server.</p>
+    <p class="help">The extension already keeps sold comps on this machine. The local tape server is optional: Postgres for verified prices, SQLite for junk. Run <code>npm run tape</code> in the grail-velocity folder. The terminal prints the secret and reuses it next time.</p>
     <form id="opts">
       <label for="tapeApi">Tape API</label>
       <input id="tapeApi" type="url" placeholder="http://127.0.0.1:8787" autocomplete="off" />
       <label for="tapeSecret">Shared secret</label>
-      <input id="tapeSecret" type="password" placeholder="TAPE_SECRET" autocomplete="off" />
-      <button id="save" type="submit">Save</button>
+      <input id="tapeSecret" type="text" placeholder="paste the line printed by npm run tape" autocomplete="off" spellcheck="false" />
+      <div class="row3">
+        <button type="button" class="secondary" id="mint">Mint</button>
+        <button type="button" class="secondary" id="copySecret">Copy secret</button>
+        <button type="button" class="secondary" id="copyCmd">Copy npm command</button>
+      </div>
+      <div class="row">
+        <button type="button" class="secondary" id="check">Check connection</button>
+        <button id="save" type="submit">Save</button>
+      </div>
       <p id="status"></p>
     </form>
     <script src="options.js"></script>

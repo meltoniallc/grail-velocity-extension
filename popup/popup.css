@@ -97,3 +97,7 @@ footer button {
   background: var(--raised);
   color: var(--fg);
 }
+footer button#read {
+  background: var(--accent);
+  color: var(--accent-fg);
+}
