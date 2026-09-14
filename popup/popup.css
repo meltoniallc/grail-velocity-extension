@@ -68,6 +68,8 @@ button {
   color: var(--muted);
 }
 ul { list-style: none; margin: 8px 0 0; padding: 0 8px 8px; max-height: 320px; overflow: auto; }
+#suggest { max-height: 180px; margin-top: 0; padding-top: 0; border-bottom: 1px solid var(--border); }
+#suggest .gap { color: var(--ok); }
 li button.row {
   display: grid;
   grid-template-columns: 1fr auto;

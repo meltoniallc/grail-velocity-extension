@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Grail Velocity tape</title>
+    <link rel="stylesheet" href="../popup/popup.css" />
+    <style>
+      body { width: 420px; padding-bottom: 16px; }
+      label { display: block; margin: 12px 16px 4px; font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); }
+      p.help { margin: 8px 16px 0; font-size: 12px; color: var(--subtle); line-height: 1.45; }
+      #opts { padding: 0 16px 16px; display: grid; gap: 8px; }
+      #opts input { width: 100%; }
+      #status { margin: 0; font-size: 12px; color: var(--ok); min-height: 1.2em; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <p class="kicker">Options</p>
+      <h1>Tape store</h1>
+    </header>
+    <p class="help">Verified prices stay in the extension for instant typeahead. Optionally sync them to Postgres and park rejected titles in SQLite via the local tape server.</p>
+    <form id="opts">
+      <label for="tapeApi">Tape API</label>
+      <input id="tapeApi" type="url" placeholder="http://127.0.0.1:8787" autocomplete="off" />
+      <label for="tapeSecret">Shared secret</label>
+      <input id="tapeSecret" type="password" placeholder="TAPE_SECRET" autocomplete="off" />
+      <button id="save" type="submit">Save</button>
+      <p id="status"></p>
+    </form>
+    <script src="options.js"></script>
+  </body>
+</html>

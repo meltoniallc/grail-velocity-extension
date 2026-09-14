@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Grail Velocity tape harness</title>
+    <link rel="stylesheet" href="../content/overlay.css" />
+    <style>
+      body { margin: 0; background: #0c0c0b; }
+      #host { width: 360px; height: 100vh; }
+    </style>
+  </head>
+  <body>
+    <div id="host" class="gv"></div>
+    <script src="../lib/core.js"></script>
+    <script>
+      const QUERY = "2023-24 Topps Mercury Victor Wembanyama #5 Refractor 74/99";
+      const listings = [
+        { id: "1", title: "2023-24 Topps Mercury Victor Wembanyama #5 Refractor 11/99", price: 120 },
+        { id: "2", title: "2023-24 Topps Mercury Victor Wembanyama #5 Refractor 22/99", price: 110 },
+        { id: "3", title: "2023-24 Topps Mercury Victor Wembanyama #5 Refractor 33/99", price: 108 },
+        { id: "4", title: "2023-24 Topps Mercury Victor Wembanyama #5 Refractor 44/99", price: 101 },
+        { id: "5", title: "Victor Wembanyama lot of 10 cards wholesale", price: 9.99 },
+        { id: "6", title: "Wembanyama random team break spot", price: 1 },
+        { id: "7", title: "2024 Hoops Victor Wembanyama base #165", price: 2 },
+        { id: "8", title: "Wembanyama mystery grab bag", price: 3 },
+      ];
+      const tape = [
+        { query: QUERY, title: QUERY, fastCash: 101.92, nKept: 4, at: 1 },
+        { query: "2024-25 Hoops Victor Wembanyama Premium Prizms Blue 14/49", title: "2024-25 Hoops Victor Wembanyama Premium Prizms Blue 14/49", fastCash: 34.99, nKept: 4, at: 2 },
+      ];
+      const result = GV.verifyComps(QUERY, listings);
+      const velocity = GV.scoreVelocity({ verified: result.rows, cogs: 80 });
+      const kept = result.rows.filter((r) => r.keep);
+      const q = new URLSearchParams(location.search).get("q") || "2023-24 Topps Mercury";
+      const hits = GV.suggestTape(q, { tape, catalog: [], limit: 8 });
+      document.getElementById("host").innerHTML = `
+        <div class="gv-head"><div><p class="gv-kicker">Grail Velocity</p><p class="gv-title">High-match tape</p></div></div>
+        <div class="gv-body">
+          <form class="gv-type"><input id="gv-q" type="search" value="${q}" /></form>
+          <ul class="gv-suggest">${hits.map((h) => `<li><button type="button"><span>${h.title}</span><span class="gv-price">${GV.money(h.fastCash)}</span></button></li>`).join("")}</ul>
+          <p class="gv-q">${QUERY}</p>
+          <div class="gv-card">
+            <div class="gv-row">
+              <span class="gv-badge ${(velocity.action || "").toLowerCase()}">${(velocity.action || "").replace("_", " ")}</span>
+              <span class="gv-id">${kept.length} kept · stopped at row ${result.stoppedAt + 1}</span>
+            </div>
+            <p class="gv-note gv-cliff">${result.nCliff} titles no longer matched — noise parked, not priced.</p>
+            <p class="gv-kicker" style="margin-top:12px">Fast-Cash</p>
+            <p class="gv-fast">${GV.money(velocity.fastCashPrice)}</p>
+            <dl class="gv-dl">
+              <div><dt>P25–P75</dt><dd>${GV.money(velocity.p25)}–${GV.money(velocity.p75)}</dd></div>
+              <div><dt>Median</dt><dd>${GV.money(velocity.median)}</dd></div>
+            </dl>
+          </div>
+          <p class="gv-sec">Verified solds</p>
+          <ul class="gv-list">${kept.map((row) => `<li><button type="button"><span><span class="gv-match">${Math.round(row.matchScore * 100)}%</span>${row.title}</span><span class="gv-price">${GV.money(row.price)}</span></button></li>`).join("")}</ul>
+        </div>`;
+      document.getElementById("gv-q").addEventListener("input", (e) => {
+        const next = GV.suggestTape(e.target.value, { tape, catalog: [], limit: 8 });
+        document.querySelector(".gv-suggest").innerHTML = next
+          .map((h) => `<li><button type="button"><span>${h.title}</span><span class="gv-price">${GV.money(h.fastCash)}</span></button></li>`)
+          .join("");
+      });
+    </script>
+  </body>
+</html>
