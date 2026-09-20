@@ -4,7 +4,7 @@ Chromium MV3 overlay. Reads eBay sold tape as you. Fast-Cash is **sold tape only
 
 ## Status
 
-**v1.2.2**
+**v1.2.3**
 
 - Fast-Cash chip says **TAPE** or **NO TAPE**. Catalog book price is labeled Book ref and cannot be Applied.
 - Scrape any eBay tab. Live BIN/asks never write Fast-Cash.
@@ -12,6 +12,7 @@ Chromium MV3 overlay. Reads eBay sold tape as you. Fast-Cash is **sold tape only
 - Optional tape server (Postgres + SQLite). Extension works without it.
 - Tape server: 1MB body cap, pre-auth `/health` is `{ok:true}` with no CORS, secret file is `0600`.
 - Operator UX: SPA MutationObserver rescan (keeps toggles), Alt+Shift+G panel toggle, Copy findings, status feedback, side panel last-read + Copy queue.
+- Operator UX helpers live in `lib/overlay.js` and ship in the zip (required by the overlay).
 
 ## Load
 
