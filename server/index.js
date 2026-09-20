@@ -8,6 +8,7 @@ const { resolveSecret } = require("./secret");
 const PORT = Number(process.env.PORT || 8787);
 const SQLITE_PATH = process.env.SQLITE_PATH || path.join(__dirname, "..", "data", "scratch.sqlite");
 const DATABASE_URL = process.env.DATABASE_URL || "";
+const MAX_BODY_BYTES = 1_000_000;
 const secretInfo = resolveSecret({
   env: process.env,
   filePath: path.join(__dirname, "..", "data", "tape.secret"),
@@ -27,9 +28,6 @@ function send(res, status, body) {
   res.writeHead(status, {
     "Content-Type": "application/json; charset=utf-8",
     "Content-Length": Buffer.byteLength(json),
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Headers": "Content-Type, X-Tape-Secret",
-    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
   });
   res.end(json);
 }
@@ -42,8 +40,23 @@ function unauthorized(req) {
 function readBody(req) {
   return new Promise((resolve, reject) => {
     const chunks = [];
-    req.on("data", (c) => chunks.push(c));
+    let size = 0;
+    let tooLarge = false;
+    req.on("data", (c) => {
+      size += c.length;
+      if (size > MAX_BODY_BYTES) {
+        // Stop buffering but keep draining so the socket stays usable.
+        tooLarge = true;
+        chunks.length = 0;
+        return;
+      }
+      chunks.push(c);
+    });
     req.on("end", () => {
+      if (tooLarge) {
+        reject(Object.assign(new Error("request body exceeds size limit"), { statusCode: 413 }));
+        return;
+      }
       const raw = Buffer.concat(chunks).toString("utf8");
       if (!raw) return resolve({});
       try {
@@ -64,12 +77,7 @@ const server = http.createServer(async (req, res) => {
     }
     const url = new URL(req.url, "http://127.0.0.1");
     if (req.method === "GET" && url.pathname === "/health") {
-      send(res, 200, {
-        ok: true,
-        postgres: Boolean(pool),
-        sqlite: SQLITE_PATH,
-        secret: Boolean(TAPE_SECRET),
-      });
+      send(res, 200, { ok: true });
       return;
     }
     if (unauthorized(req)) {
@@ -98,7 +106,7 @@ const server = http.createServer(async (req, res) => {
     }
     send(res, 404, { ok: false, error: "not found" });
   } catch (err) {
-    send(res, 500, { ok: false, error: String(err.message || err) });
+    send(res, err.statusCode || 500, { ok: false, error: String(err.message || err) });
   }
 });
 

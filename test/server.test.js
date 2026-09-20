@@ -83,3 +83,33 @@ test("tape server parks noise in sqlite and does not require postgres", async ()
     child.kill();
   }
 });
+
+test("tape server caps bodies, minimizes pre-auth health, and omits CORS", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "gv-tape-hard-"));
+  const sqlite = path.join(dir, "scratch.sqlite");
+  const child = spawn(process.execPath, [path.join(__dirname, "..", "server", "index.js")], {
+    env: { ...process.env, PORT: "0", SQLITE_PATH: sqlite, TAPE_SECRET: "test-secret" },
+    stdio: ["ignore", "ignore", "pipe"],
+  });
+  try {
+    const port = await waitPort(child);
+    const base = `http://127.0.0.1:${port}`;
+    const health = await fetch(`${base}/health`);
+    assert.equal(health.status, 200);
+    assert.deepEqual(await health.json(), { ok: true });
+    assert.equal(health.headers.get("access-control-allow-origin"), null);
+    const authed = { "X-Tape-Secret": "test-secret" };
+    const ping = await fetch(`${base}/ping`, { headers: authed });
+    assert.equal(ping.status, 200);
+    assert.equal(ping.headers.get("access-control-allow-origin"), null);
+    assert.equal((await ping.json()).postgres, false);
+    const big = await fetch(`${base}/tape`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...authed },
+      body: JSON.stringify({ snapshot: null, scratch: { listings: [] }, pad: "x".repeat(1_200_000) }),
+    });
+    assert.equal(big.status, 413);
+  } finally {
+    child.kill();
+  }
+});

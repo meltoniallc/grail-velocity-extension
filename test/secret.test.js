@@ -27,3 +27,18 @@ test("env TAPE_SECRET wins and is written to the file for the next boot", () => 
   const second = resolveSecret({ env: {}, filePath });
   assert.equal(second.secret, "from-options");
 });
+
+test("tape secret file is owner-only regardless of umask", () => {
+  for (const env of [{}, { TAPE_SECRET: "from-options" }]) {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "gv-secret-"));
+    const filePath = path.join(dir, "tape.secret");
+    resolveSecret({ env, filePath });
+    assert.equal(fs.statSync(filePath).mode & 0o777, 0o600);
+  }
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "gv-secret-"));
+  const filePath = path.join(dir, "tape.secret");
+  fs.writeFileSync(filePath, "legacy-secret\n");
+  fs.chmodSync(filePath, 0o644);
+  resolveSecret({ env: {}, filePath });
+  assert.equal(fs.statSync(filePath).mode & 0o777, 0o600);
+});

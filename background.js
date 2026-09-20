@@ -126,7 +126,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           sendResponse({ ok: false, error: `Tape API returned ${pingRes.status}.` });
           return;
         }
-        sendResponse({ ok: true, postgres: Boolean(health.postgres) });
+        const ping = await pingRes.json().catch(() => ({}));
+        sendResponse({ ok: true, postgres: Boolean(ping.postgres) });
       } catch {
         sendResponse({
           ok: false,
