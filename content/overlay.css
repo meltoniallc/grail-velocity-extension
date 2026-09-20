@@ -58,6 +58,37 @@
   padding: 16px;
 }
 .gv-q { font-size: 12px; color: var(--muted); line-height: 1.4; margin: 0; }
+.gv-hint {
+  margin: 6px 0 0;
+  font-size: 11px;
+  color: var(--subtle);
+  letter-spacing: 0.02em;
+}
+.gv-status {
+  margin: 10px 0 0;
+  padding: 10px 12px;
+  border-radius: 6px;
+  background: rgba(122, 154, 124, 0.12);
+  color: var(--ok);
+  font-size: 12px;
+  line-height: 1.4;
+}
+.gv-empty {
+  padding: 12px;
+  margin-top: 4px;
+  background: var(--surface);
+  border-radius: 8px;
+}
+.gv-empty p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.45;
+}
+.gv-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
 .gv-sku {
   display: grid;
   grid-template-columns: 52px 1fr;

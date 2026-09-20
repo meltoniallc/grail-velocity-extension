@@ -11,11 +11,16 @@
     <header>
       <p class="kicker">Side panel · book</p>
       <h1>Cut queue</h1>
+      <p id="last" class="status"></p>
+      <p id="meta" class="status muted"></p>
     </header>
     <form id="search">
       <input id="q" type="search" placeholder="Type a card — instant tape" autocomplete="off" />
       <button type="submit">Sold tape</button>
     </form>
+    <div class="toolbar">
+      <button type="button" id="copy-queue" class="ghost">Copy queue</button>
+    </div>
     <ul id="cuts"></ul>
     <script src="../lib/core.js"></script>
     <script src="sidepanel.js"></script>

@@ -4,12 +4,13 @@ Chromium MV3 overlay. Reads eBay sold tape as you. Fast-Cash is **sold tape only
 
 ## Status
 
-**v1.2.1**
+**v1.2.2**
 
 - Fast-Cash chip says **TAPE** or **NO TAPE**. Catalog book price is labeled Book ref and cannot be Applied.
 - Scrape any eBay tab. Live BIN/asks never write Fast-Cash.
 - High-match keep (72%+). Cliff after 3 consecutive misses.
 - Optional tape server (Postgres + SQLite). Extension works without it.
+- Operator UX: SPA MutationObserver rescan (keeps toggles), Alt+Shift+G panel toggle, Copy findings, status feedback, side panel last-read + Copy queue.
 
 ## Load
 

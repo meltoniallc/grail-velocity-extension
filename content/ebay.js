@@ -19,6 +19,11 @@
   let suggests = [];
   let typeQuery = "";
   let typeGen = 0;
+  let statusMsg = "";
+  let settings = { ...GV.DEFAULT_FEES };
+  let lastSig = "";
+  let observeTimer = null;
+  let statusTimer = null;
 
   function cssUrl() {
     return chrome.runtime.getURL("content/overlay.css");
@@ -41,6 +46,30 @@
     } catch {
       catalog = [];
     }
+  }
+
+  async function loadPrefs() {
+    try {
+      const stored = await chrome.storage.local.get(["fees", "overlayOpen"]);
+      if (stored.fees && typeof stored.fees === "object") {
+        settings = { ...GV.DEFAULT_FEES, ...stored.fees };
+      }
+      if (typeof stored.overlayOpen === "boolean") open = stored.overlayOpen;
+    } catch {
+      /* ignore */
+    }
+  }
+
+  function setStatus(msg, ms = 3500) {
+    statusMsg = msg || "";
+    if (statusTimer) clearTimeout(statusTimer);
+    if (msg && ms > 0) {
+      statusTimer = setTimeout(() => {
+        statusMsg = "";
+        if (open) render();
+      }, ms);
+    }
+    if (open) render();
   }
 
   function panelStyle() {
@@ -67,6 +96,12 @@
     shadow.appendChild(wrap);
     document.documentElement.appendChild(host);
     return host;
+  }
+
+  function setOpen(next) {
+    open = next;
+    chrome.storage.local.set({ overlayOpen: open }).catch(() => {});
+    render();
   }
 
   function matchPct(score) {
@@ -115,6 +150,14 @@
     return "Scrape this page for high-match titles. Open solds when you need comps.";
   }
 
+  function emptyListMsg() {
+    if (scraping) return "Reading this tab…";
+    if (pageMode === "sold") {
+      return "Sold results are still loading, or selectors missed this layout. Wait a beat or scrape again.";
+    }
+    return "Nothing scraped yet. Scrape this page pulls high-match titles from live search, solds, or a listing.";
+  }
+
   function render() {
     const host = ensureHost();
     const wrap = host.shadowRoot.querySelector(".gv");
@@ -148,6 +191,7 @@
         <form class="gv-type" data-act="type-form">
           <input id="gv-q" type="search" placeholder="Type a card — tape answers as you go" value="${esc(typeQuery)}" autocomplete="off" />
         </form>
+        <p class="gv-hint">Alt+Shift+G toggles this panel</p>
         ${
           suggests.length
             ? `<ul class="gv-suggest">${suggests
@@ -214,7 +258,9 @@
             ${applied != null ? "Applied " + GV.money(applied) : "Apply Fast-Cash"}
           </button>
           <button class="gv-btn wide" type="button" data-act="copy"${fast == null ? " disabled" : ""}>Copy price</button>
+          <button class="gv-btn wide" type="button" data-act="copy-findings"${!soldTape.length && !pageRows.length ? " disabled" : ""}>Copy findings</button>
         </div>
+        ${statusMsg ? `<p class="gv-status" role="status">${esc(statusMsg)}</p>` : ""}
         <p class="gv-sec">
           ${esc(listHeading())}
           <button type="button" class="gv-link" data-act="noise">${showDropped ? "Hide noise" : "Show " + droppedCount + " dropped"}</button>
@@ -236,11 +282,7 @@
             )
             .join("")}
         </ul>`
-            : `<p class="gv-empty">${
-                scraping
-                  ? "Reading this tab…"
-                  : "Nothing scraped yet. Scrape this page pulls high-match titles from live search, solds, or a listing."
-              }</p>`
+            : `<p class="gv-empty">${esc(emptyListMsg())}</p>`
         }
       </div>
     `;
@@ -304,6 +346,28 @@
     paintSuggests();
   }
 
+  function findingsText() {
+    const keptPage = pageRows.filter((row) => row.keep);
+    const keptSold = soldTape.filter((row) => row.keep);
+    const fast = GV.cashFromTape(velocity).value;
+    const lines = [
+      `Grail Velocity — ${query || "(no query)"}`,
+      `Action: ${velocity?.action || "QUARANTINE"}`,
+      `Fast-Cash: ${GV.money(fast)}`,
+      `P25–P75: ${GV.money(velocity?.p25)}–${GV.money(velocity?.p75)}`,
+      `Net after fees: ${GV.money(velocity?.netMedian)}`,
+      `Page kept: ${keptPage.length}/${pageRows.length}`,
+      `Sold kept: ${keptSold.length}/${soldTape.length}`,
+      "",
+      "Sold tape:",
+      ...keptSold.map((r) => `- ${r.title} — ${GV.money(r.price)}`),
+    ];
+    if (velocity?.reasons?.length) {
+      lines.push("", "Why:", ...velocity.reasons.map((r) => `- ${r}`));
+    }
+    return lines.join("\n");
+  }
+
   function applySoldTape(snapshot) {
     if (!snapshot?.comps?.length) return;
     const byId = new Map(soldTape.map((row) => [row.id, row]));
@@ -332,6 +396,7 @@
         };
         sku = GV.matchSku(catalog, query);
         recompute();
+        writeLastRead();
         render();
         return true;
       }
@@ -346,13 +411,11 @@
     if (!btn) return;
     const act = btn.getAttribute("data-act");
     if (act === "close") {
-      open = false;
-      render();
+      setOpen(false);
       return;
     }
     if (act === "open") {
-      open = true;
-      render();
+      setOpen(true);
       return;
     }
     if (act === "apply") {
@@ -360,15 +423,22 @@
       if (fast == null) return;
       const ok = GV.applyPrice(fast);
       applied = fast;
-      if (!ok) {
-        navigator.clipboard?.writeText(Number(fast).toFixed(2));
-      }
       await chrome.storage.local.set({ lastApply: { sku: sku?.id, price: fast, at: Date.now() } });
-      render();
+      if (ok) {
+        setStatus(`Wrote ${GV.money(fast)} into the price field.`);
+      } else {
+        try {
+          await navigator.clipboard.writeText(Number(fast).toFixed(2));
+          setStatus(`No price field here — copied ${GV.money(fast)} to clipboard.`);
+        } catch {
+          setStatus(`Could not write or copy ${GV.money(fast)}.`);
+          render();
+        }
+      }
       return;
     }
     if (act === "scrape") {
-      await read();
+      await read(true);
       return;
     }
     if (act === "sold") {
@@ -378,7 +448,22 @@
     }
     if (act === "copy") {
       const fast = GV.cashFromTape(velocity).value;
-      if (fast != null) navigator.clipboard?.writeText(Number(fast).toFixed(2));
+      if (fast == null) return;
+      try {
+        await navigator.clipboard.writeText(Number(fast).toFixed(2));
+        setStatus(`Copied ${GV.money(fast)}.`);
+      } catch {
+        setStatus("Clipboard blocked — copy failed.");
+      }
+      return;
+    }
+    if (act === "copy-findings") {
+      try {
+        await navigator.clipboard.writeText(findingsText());
+        setStatus("Copied findings (action + kept comps).");
+      } catch {
+        setStatus("Clipboard blocked — copy failed.");
+      }
       return;
     }
     if (act === "noise") {
@@ -405,6 +490,8 @@
         soldTape = GV.soldVerified(pageRows);
       }
       recompute();
+      lastSig = sigNow();
+      writeLastRead();
       render();
     }
   }
@@ -416,9 +503,31 @@
       verified: soldTape.filter((row) => row.keep),
       cogs: sku?.cogs || 0,
       listPrice: listedAsk,
-      settings: GV.DEFAULT_FEES,
+      settings,
       category: sku?.category,
     });
+  }
+
+  function sigNow() {
+    const page = pageRows.map((v) => `${v.id}:${v.price}:${v.keep ? 1 : 0}`).join("|");
+    const sold = soldTape.map((v) => `${v.id}:${v.price}:${v.keep ? 1 : 0}`).join("|");
+    return `${query}::${page}::${sold}::${sku?.id || ""}::${velocity?.action || ""}`;
+  }
+
+  function writeLastRead() {
+    const keptSold = soldTape.filter((row) => row.keep);
+    chrome.storage.local
+      .set({
+        lastRead: {
+          query,
+          n: soldTape.length || pageRows.length,
+          kept: keptSold.length || pageRows.filter((row) => row.keep).length,
+          action: velocity?.action || "QUARANTINE",
+          fastCash: GV.cashFromTape(velocity).value,
+          at: Date.now(),
+        },
+      })
+      .catch(() => {});
   }
 
   async function scrapeListings() {
@@ -430,10 +539,12 @@
     return listings;
   }
 
-  async function read() {
+  async function read(force = false) {
     if (scrapeLock) return;
     scrapeLock = true;
     scraping = true;
+    const prevQ = query;
+    const prevKeep = new Map(pageRows.map((row) => [row.id, row.keep]));
     pageMode = GV.pageMode();
     query = GV.pageQuery();
     typeQuery = typeQuery || query;
@@ -450,6 +561,11 @@
         nKept: result.nKept,
       };
       pageRows = result.rows;
+      if (query === prevQ && prevKeep.size) {
+        pageRows = pageRows.map((row) =>
+          prevKeep.has(row.id) ? { ...row, keep: prevKeep.get(row.id) } : row,
+        );
+      }
       sku = GV.matchSku(catalog, query);
       const listingPrice = document.querySelector("#binPrice, input[name='binPrice'], .x-price-primary");
       if (listingPrice && sku) {
@@ -457,7 +573,7 @@
         if (live) sku = { ...sku, listPrice: live };
       }
       if (pageMode === "sold") {
-        applySoldTape({ comps: GV.soldVerified(result.rows) });
+        applySoldTape({ comps: GV.soldVerified(pageRows) });
       }
       recompute();
       if (listings.length) {
@@ -475,6 +591,10 @@
           /* local only */
         }
       }
+      const next = sigNow();
+      if (!force && next === lastSig) return;
+      lastSig = next;
+      writeLastRead();
     } finally {
       scraping = false;
       scrapeLock = false;
@@ -490,6 +610,41 @@
       .replace(/"/g, "\u0026quot;");
   }
 
+  function isInsideHost(node) {
+    if (!node) return false;
+    if (node.id === HOST_ID) return true;
+    if (node.nodeType === 1 && node.closest?.("#" + HOST_ID)) return true;
+    if (node.nodeType === 3 && node.parentElement?.closest?.("#" + HOST_ID)) return true;
+    return false;
+  }
+
+  function pageChanged(mutations) {
+    for (const m of mutations) {
+      if (isInsideHost(m.target)) continue;
+      for (const n of m.addedNodes) {
+        if (isInsideHost(n)) continue;
+        return true;
+      }
+      for (const n of m.removedNodes) {
+        if (isInsideHost(n)) continue;
+        return true;
+      }
+      if (m.type === "attributes" || m.type === "characterData") return true;
+    }
+    return false;
+  }
+
+  function shouldWatchPage() {
+    return GV.isSoldSearch() || GV.isSearchPage() || GV.isListingOrRevise() || GV.scrapeEbay(document).length > 0;
+  }
+
+  function scheduleRead() {
+    if (observeTimer) clearTimeout(observeTimer);
+    observeTimer = setTimeout(() => {
+      if (shouldWatchPage()) read(false);
+    }, 450);
+  }
+
   function watchLocation() {
     let href = location.href;
     setInterval(() => {
@@ -500,9 +655,10 @@
       typeQuery = query;
       pageRows = [];
       applied = null;
+      lastSig = "";
       render();
       if (GV.isSoldSearch() || GV.isSearchPage() || GV.isListingOrRevise()) {
-        read();
+        read(true);
       } else if (query) {
         loadSnapshot(query);
       }
@@ -511,27 +667,45 @@
 
   chrome.runtime.onMessage.addListener((msg, _s, send) => {
     if (msg?.type === "GV_TOGGLE") {
-      open = !open;
-      render();
-      if (open) read();
+      setOpen(!open);
+      if (open) read(true);
       send({ open });
     }
     if (msg?.type === "GV_READ") {
-      open = true;
-      read();
+      setOpen(true);
+      read(true);
       send({ query, n: pageRows.length, action: velocity?.action });
     }
     return true;
   });
 
-  await loadCatalog();
+  document.addEventListener(
+    "keydown",
+    (e) => {
+      if (!e.altKey || !e.shiftKey) return;
+      if (e.key !== "g" && e.key !== "G") return;
+      const tag = (e.target && e.target.tagName) || "";
+      if (tag === "INPUT" || tag === "TEXTAREA" || e.target?.isContentEditable) return;
+      e.preventDefault();
+      setOpen(!open);
+      if (open) read(true);
+    },
+    true,
+  );
+
+  await Promise.all([loadCatalog(), loadPrefs()]);
   pageMode = GV.pageMode();
   query = GV.pageQuery();
   typeQuery = query;
   render();
   watchLocation();
+  const mo = new MutationObserver((mutations) => {
+    if (!pageChanged(mutations)) return;
+    scheduleRead();
+  });
+  mo.observe(document.documentElement, { childList: true, subtree: true });
   if (GV.isSoldSearch() || GV.isSearchPage() || GV.isListingOrRevise()) {
-    await read();
+    await read(true);
   } else if (query) {
     await loadSnapshot(query);
   }

@@ -10,8 +10,21 @@ async function catalog() {
   return data;
 }
 
-function paint(list) {
+function paint(list, label) {
   const ul = document.getElementById("cuts");
+  const meta = document.getElementById("meta");
+  const n = list.length;
+  if (meta) {
+    meta.textContent = n
+      ? `${n} in queue${label ? " · " + label : ""}`
+      : "No cuts match — widen search or refresh the book.";
+  }
+
+  if (!n) {
+    ul.innerHTML = `<li class="empty">Nothing in the cut queue for this filter. Search the book or open sold tape from a title.</li>`;
+    return;
+  }
+
   ul.innerHTML = list
     .slice(0, 40)
     .map((i) => {
@@ -43,20 +56,37 @@ function rank(list) {
     .sort((a, b) => b.listPrice - b.fastCash - (a.listPrice - a.fastCash));
 }
 
+async function paintLastRead() {
+  const el = document.getElementById("last");
+  if (!el) return;
+  try {
+    const { lastRead } = await chrome.storage.local.get("lastRead");
+    if (!lastRead?.at) {
+      el.textContent = "No tab read yet. On eBay: popup → Read this tab, or Alt+Shift+G.";
+      return;
+    }
+    const age = Math.max(0, Math.round((Date.now() - lastRead.at) / 60000));
+    const when = age < 1 ? "just now" : age === 1 ? "1m ago" : `${age}m ago`;
+    el.textContent = `Last read ${when}: ${lastRead.query || "—"} · ${lastRead.kept}/${lastRead.n} kept · ${String(lastRead.action || "").replace("_", " ")}${lastRead.fastCash != null ? " · " + GV.money(lastRead.fastCash) : ""}`;
+  } catch {
+    el.textContent = "Could not load last read status.";
+  }
+}
+
 let typeGen = 0;
 
 async function onTyped() {
   const q = document.getElementById("q").value.trim();
   const gen = (typeGen += 1);
   if (q.length < 1) {
-    paint(rank(items));
+    paint(rank(items), "by gap");
     return;
   }
   try {
     const res = await chrome.runtime.sendMessage({ type: "GV_SUGGEST", q });
     if (gen !== typeGen) return;
     if (res?.hits?.length) {
-      paint(res.hits);
+      paint(res.hits, "suggest");
       return;
     }
   } catch {
@@ -69,7 +99,7 @@ async function onTyped() {
     .filter((x) => x.score > 0.18)
     .sort((a, b) => b.score - a.score)
     .map((x) => x.item);
-  paint(hits);
+  paint(hits, "search");
 }
 
 document.getElementById("cuts").addEventListener("click", (e) => {
@@ -89,9 +119,36 @@ document.getElementById("q").addEventListener("input", () => {
   onTyped();
 });
 
+const copyQueueBtn = document.getElementById("copy-queue");
+if (copyQueueBtn) {
+  copyQueueBtn.addEventListener("click", async () => {
+    const ranked = rank(items).slice(0, 40);
+    if (!ranked.length) return;
+    const text = ranked
+      .map((i) => {
+        const gap = (i.listPrice || 0) - (i.fastCash || 0);
+        return `${i.id}\t${i.title}\t${GV.money(i.listPrice)}\t${GV.money(i.fastCash)}\t${GV.money(gap)}`;
+      })
+      .join("\n");
+    const header = "id\ttitle\tlist\tfastCash\tgap\n";
+    const meta = document.getElementById("meta");
+    try {
+      await navigator.clipboard.writeText(header + text);
+      if (meta) meta.textContent = `Copied ${ranked.length} cuts to clipboard.`;
+    } catch {
+      if (meta) meta.textContent = "Clipboard blocked — copy failed.";
+    }
+  });
+}
+
 async function initPanel() {
   items = await catalog();
-  paint(rank(items));
+  paint(rank(items), "by gap");
+  paintLastRead();
 }
 
 initPanel();
+
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === "local" && changes.lastRead) paintLastRead();
+});

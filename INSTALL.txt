@@ -1,4 +1,4 @@
-Grail Velocity v1.2.1 — Fast-Cash is sold tape only.
+Grail Velocity v1.2.2 — Fast-Cash is sold tape only.
 
 Build (from repo root):
   npm run package
@@ -12,3 +12,5 @@ Build (from repo root):
 5. Sold + Completed search → overlay → Scrape solds.
    Chip must say TAPE before you Apply.
 6. Book ref is catalog, not this page. Do not apply it.
+7. Operator UX: SPA rescan, Alt+Shift+G toggle, Copy findings,
+   side panel last-read status + Copy queue.

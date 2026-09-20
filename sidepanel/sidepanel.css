@@ -3,3 +3,27 @@ html, body.panel {
   min-height: 100vh;
 }
 body.panel ul { max-height: none; }
+.status {
+  margin: 8px 0 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--fg);
+}
+.status.muted { color: var(--muted); }
+.toolbar {
+  padding: 0 16px 8px;
+}
+.toolbar .ghost {
+  height: 36px;
+  background: var(--raised);
+  color: var(--fg);
+}
+li.empty {
+  margin: 8px;
+  padding: 14px;
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
