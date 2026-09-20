@@ -7,6 +7,11 @@
       "command": "npm run tape"
     }
   ],
-  "ports": [8787],
+  "ports": [
+    {
+      "name": "tape-server",
+      "port": 8787
+    }
+  ],
   "chromeExecutablePath": "/usr/bin/google-chrome-stable"
 }
