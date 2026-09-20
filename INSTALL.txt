@@ -1,5 +1,9 @@
 Grail Velocity v1.2.1 — Fast-Cash is sold tape only.
 
+Build (from repo root):
+  npm run package
+  → dist/grail-velocity-extension.zip
+
 1. Unzip grail-velocity-extension.zip
 2. Open the grail-velocity folder. manifest.json must sit next to background.js
 3. chrome://extensions → Developer mode ON → Load unpacked → that folder

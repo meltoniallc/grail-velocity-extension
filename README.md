@@ -14,6 +14,7 @@ Chromium MV3 overlay. Reads eBay sold tape as you. Fast-Cash is **sold tape only
 ## Load
 
 1. Download: https://github.com/meltoniallc/grail-velocity-extension/releases/latest/download/grail-velocity-extension.zip
+   Or from a checkout: `npm run package` → `dist/grail-velocity-extension.zip`
 2. Unzip. Open the `grail-velocity` folder (`manifest.json` must be in it).
 3. chrome://extensions → Developer mode → Load unpacked → that folder.
 
