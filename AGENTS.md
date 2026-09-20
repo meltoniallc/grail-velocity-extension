@@ -7,7 +7,7 @@
 
 ## Learned Workspace Facts
 
-- Grail Velocity is a Chromium MV3 overlay (`meltoniallc/grail-velocity-extension`). Matching lives in `lib/core.js`; tape persistence is `lib/tape.js` plus optional `server/` (Postgres + `node:sqlite`).
+- Grail Velocity is a Chromium MV3 overlay (`meltoniallc/grail-velocity-extension`). Matching lives in `lib/core.js`; tape persistence is `lib/tape.js`; operator UX helpers are `lib/overlay.js`. Optional `server/` is Postgres + `node:sqlite`.
 - Keep threshold is 72% identity; tight comps are 85%+. Cliff after 3 consecutive misses (4 from a cold start). Fast-Cash needs two tight comps or three verified.
 - Overlay, popup, and side panel typeahead query local Chrome tape first; optional Tape API is `http://127.0.0.1:8787`. SQLite scratch TTL is 7 days.
 - Overlay always exposes Scrape this page (live search, listing, sold). Live BIN/ask prices go to scratch only; Fast-Cash and Postgres stay on verified solds.

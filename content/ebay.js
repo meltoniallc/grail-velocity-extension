@@ -347,25 +347,7 @@
   }
 
   function findingsText() {
-    const keptPage = pageRows.filter((row) => row.keep);
-    const keptSold = soldTape.filter((row) => row.keep);
-    const fast = GV.cashFromTape(velocity).value;
-    const lines = [
-      `Grail Velocity — ${query || "(no query)"}`,
-      `Action: ${velocity?.action || "QUARANTINE"}`,
-      `Fast-Cash: ${GV.money(fast)}`,
-      `P25–P75: ${GV.money(velocity?.p25)}–${GV.money(velocity?.p75)}`,
-      `Net after fees: ${GV.money(velocity?.netMedian)}`,
-      `Page kept: ${keptPage.length}/${pageRows.length}`,
-      `Sold kept: ${keptSold.length}/${soldTape.length}`,
-      "",
-      "Sold tape:",
-      ...keptSold.map((r) => `- ${r.title} — ${GV.money(r.price)}`),
-    ];
-    if (velocity?.reasons?.length) {
-      lines.push("", "Why:", ...velocity.reasons.map((r) => `- ${r}`));
-    }
-    return lines.join("\n");
+    return GV.findingsText({ query, velocity, pageRows, soldTape });
   }
 
   function applySoldTape(snapshot) {
@@ -515,17 +497,15 @@
   }
 
   function writeLastRead() {
-    const keptSold = soldTape.filter((row) => row.keep);
     chrome.storage.local
       .set({
-        lastRead: {
+        lastRead: GV.lastReadPayload({
           query,
-          n: soldTape.length || pageRows.length,
-          kept: keptSold.length || pageRows.filter((row) => row.keep).length,
-          action: velocity?.action || "QUARANTINE",
-          fastCash: GV.cashFromTape(velocity).value,
+          pageRows,
+          soldTape,
+          velocity,
           at: Date.now(),
-        },
+        }),
       })
       .catch(() => {});
   }
@@ -560,12 +540,7 @@
         nRaw: result.nRaw,
         nKept: result.nKept,
       };
-      pageRows = result.rows;
-      if (query === prevQ && prevKeep.size) {
-        pageRows = pageRows.map((row) =>
-          prevKeep.has(row.id) ? { ...row, keep: prevKeep.get(row.id) } : row,
-        );
-      }
+      pageRows = GV.preserveKeepToggles(result.rows, prevKeep, query === prevQ);
       sku = GV.matchSku(catalog, query);
       const listingPrice = document.querySelector("#binPrice, input[name='binPrice'], .x-price-primary");
       if (listingPrice && sku) {
@@ -610,28 +585,8 @@
       .replace(/"/g, "\u0026quot;");
   }
 
-  function isInsideHost(node) {
-    if (!node) return false;
-    if (node.id === HOST_ID) return true;
-    if (node.nodeType === 1 && node.closest?.("#" + HOST_ID)) return true;
-    if (node.nodeType === 3 && node.parentElement?.closest?.("#" + HOST_ID)) return true;
-    return false;
-  }
-
   function pageChanged(mutations) {
-    for (const m of mutations) {
-      if (isInsideHost(m.target)) continue;
-      for (const n of m.addedNodes) {
-        if (isInsideHost(n)) continue;
-        return true;
-      }
-      for (const n of m.removedNodes) {
-        if (isInsideHost(n)) continue;
-        return true;
-      }
-      if (m.type === "attributes" || m.type === "characterData") return true;
-    }
-    return false;
+    return GV.pageChanged(mutations, HOST_ID);
   }
 
   function shouldWatchPage() {
@@ -682,10 +637,7 @@
   document.addEventListener(
     "keydown",
     (e) => {
-      if (!e.altKey || !e.shiftKey) return;
-      if (e.key !== "g" && e.key !== "G") return;
-      const tag = (e.target && e.target.tagName) || "";
-      if (tag === "INPUT" || tag === "TEXTAREA" || e.target?.isContentEditable) return;
+      if (!GV.isOverlayToggleHotkey(e)) return;
       e.preventDefault();
       setOpen(!open);
       if (open) read(true);

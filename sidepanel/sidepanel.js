@@ -51,9 +51,7 @@ function esc(s) {
 }
 
 function rank(list) {
-  return list
-    .filter((i) => i.listPrice && i.fastCash)
-    .sort((a, b) => b.listPrice - b.fastCash - (a.listPrice - a.fastCash));
+  return GV.rankCuts(list);
 }
 
 async function paintLastRead() {
@@ -61,13 +59,7 @@ async function paintLastRead() {
   if (!el) return;
   try {
     const { lastRead } = await chrome.storage.local.get("lastRead");
-    if (!lastRead?.at) {
-      el.textContent = "No tab read yet. On eBay: popup → Read this tab, or Alt+Shift+G.";
-      return;
-    }
-    const age = Math.max(0, Math.round((Date.now() - lastRead.at) / 60000));
-    const when = age < 1 ? "just now" : age === 1 ? "1m ago" : `${age}m ago`;
-    el.textContent = `Last read ${when}: ${lastRead.query || "—"} · ${lastRead.kept}/${lastRead.n} kept · ${String(lastRead.action || "").replace("_", " ")}${lastRead.fastCash != null ? " · " + GV.money(lastRead.fastCash) : ""}`;
+    el.textContent = GV.formatLastRead(lastRead, Date.now());
   } catch {
     el.textContent = "Could not load last read status.";
   }
@@ -122,18 +114,12 @@ document.getElementById("q").addEventListener("input", () => {
 const copyQueueBtn = document.getElementById("copy-queue");
 if (copyQueueBtn) {
   copyQueueBtn.addEventListener("click", async () => {
-    const ranked = rank(items).slice(0, 40);
-    if (!ranked.length) return;
-    const text = ranked
-      .map((i) => {
-        const gap = (i.listPrice || 0) - (i.fastCash || 0);
-        return `${i.id}\t${i.title}\t${GV.money(i.listPrice)}\t${GV.money(i.fastCash)}\t${GV.money(gap)}`;
-      })
-      .join("\n");
-    const header = "id\ttitle\tlist\tfastCash\tgap\n";
+    const text = GV.queueCopyText(items);
+    if (!text) return;
+    const ranked = GV.rankCuts(items).slice(0, 40);
     const meta = document.getElementById("meta");
     try {
-      await navigator.clipboard.writeText(header + text);
+      await navigator.clipboard.writeText(text);
       if (meta) meta.textContent = `Copied ${ranked.length} cuts to clipboard.`;
     } catch {
       if (meta) meta.textContent = "Clipboard blocked — copy failed.";

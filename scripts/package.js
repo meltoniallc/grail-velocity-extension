@@ -16,6 +16,7 @@ const INCLUDE = [
   "catalog.json",
   "lib/core.js",
   "lib/tape.js",
+  "lib/overlay.js",
   "content/ebay.js",
   "content/overlay.css",
   "popup/index.html",
