@@ -10,6 +10,7 @@ Chromium MV3 overlay. Reads eBay sold tape as you. Fast-Cash is **sold tape only
 - Scrape any eBay tab. Live BIN/asks never write Fast-Cash.
 - High-match keep (72%+). Cliff after 3 consecutive misses.
 - Optional tape server (Postgres + SQLite). Extension works without it.
+- Tape server: 1MB body cap, pre-auth `/health` is `{ok:true}` with no CORS, secret file is `0600`.
 - Operator UX: SPA MutationObserver rescan (keeps toggles), Alt+Shift+G panel toggle, Copy findings, status feedback, side panel last-read + Copy queue.
 
 ## Load
