@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Node
+        uses: actions/setup-node@v3
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
+      - name: Lint with stylelint (if needed)
+        # Placeholder for CSS/HTML lint if project grows
+
+      - name: Check for secrets (basic)
+        run: |
+          git diff --cached | grep -i "TOKEN\|SECRET\|key" && echo "Potential secrets in staged changes" || true
