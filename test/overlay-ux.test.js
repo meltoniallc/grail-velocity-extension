@@ -169,6 +169,7 @@ test("queueCopyText ranks by list-to-tape gap and caps at 40", () => {
 
 test("content script and side panel call extracted overlay helpers", () => {
   const ebay = fs.readFileSync(path.join(__dirname, "../content/ebay.js"), "utf8");
+  const demo = fs.readFileSync(path.join(__dirname, "../test/overlay-demo.html"), "utf8");
   const panel = fs.readFileSync(path.join(__dirname, "../sidepanel/sidepanel.js"), "utf8");
   const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, "../manifest.json"), "utf8"));
   assert.match(ebay, /GV\.findingsText\(/);
@@ -183,4 +184,5 @@ test("content script and side panel call extracted overlay helpers", () => {
   assert.match(ebay, /soldTape = \[\]/);
   assert.match(ebay, /readGen/);
   assert.deepEqual(manifest.content_scripts[0].js, ["lib/core.js", "lib/overlay.js", "content/ebay.js"]);
+  assert.match(demo, /lib\/overlay\.js/);
 });
