@@ -19,8 +19,7 @@ function mintSecret() {
 }
 
 function npmCommand() {
-  const secret = secretValue();
-  return secret ? `TAPE_SECRET=${secret} npm run tape` : "npm run tape";
+  return globalThis.GV.npmTapeCommand(secretValue());
 }
 
 async function load() {

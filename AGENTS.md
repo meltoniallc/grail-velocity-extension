@@ -11,4 +11,5 @@
 - Keep threshold is 72% identity; tight comps are 85%+. Cliff after 3 consecutive misses (4 from a cold start). Fast-Cash needs two tight comps or three verified.
 - Overlay, popup, and side panel typeahead query local Chrome tape first; optional Tape API is `http://127.0.0.1:8787`. SQLite scratch TTL is 7 days.
 - Overlay always exposes Scrape this page (live search, listing, sold). Live BIN/ask prices go to scratch only; Fast-Cash and Postgres stay on verified solds.
+- SPA navigation clears sold tape for the previous query. Live captions like "3 sold" are asks, not comps.
 - `npm run tape` prints a stable secret from `data/tape.secret` (env wins). Options Check connection hits `/ping`.

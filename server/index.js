@@ -11,7 +11,7 @@ const DATABASE_URL = process.env.DATABASE_URL || "";
 const MAX_BODY_BYTES = 1_000_000;
 const secretInfo = resolveSecret({
   env: process.env,
-  filePath: path.join(__dirname, "..", "data", "tape.secret"),
+    filePath: process.env.TAPE_SECRET_FILE || path.join(__dirname, "..", "data", "tape.secret"),
 });
 const TAPE_SECRET = secretInfo.secret;
 

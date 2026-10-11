@@ -118,6 +118,40 @@ test("lastReadPayload and formatLastRead drive the side panel status line", () =
     "Last read just now: Mercury #5 · 1/1 kept · FAST CASH · $98.00",
   );
   assert.match(GV.formatLastRead(null, 1_000), /No tab read yet/);
+  assert.match(GV.formatLastRead(null, 1_000), /Scrape this page/);
+});
+
+test("listedAsk uses the page ask, never the catalog BIN", () => {
+  const sku = { listPrice: 999, fastCash: 50 };
+  const rows = [
+    { keep: true, price: 120 },
+    { keep: false, price: 9 },
+  ];
+  assert.equal(GV.listedAsk("live", sku, rows), 120);
+  assert.equal(GV.listedAsk("listing", sku, rows), 120);
+  assert.equal(GV.listedAsk("sold", sku, rows), null);
+  assert.equal(GV.listedAsk("live", sku, []), null);
+});
+
+test("mergeKeepIntoSoldTape flips the current row and keeps other pages' comps", () => {
+  const tape = [
+    { id: "a", keep: true, kind: "sold", price: 120 },
+    { id: "cached", keep: true, kind: "sold", price: 110 },
+  ];
+  const pageRows = [
+    { id: "a", keep: false, kind: "sold", price: 120 },
+    { id: "live", keep: true, kind: "active", price: 9 },
+  ];
+  const next = GV.mergeKeepIntoSoldTape(tape, pageRows);
+  assert.equal(next.find((r) => r.id === "a").keep, false);
+  assert.equal(next.find((r) => r.id === "cached").keep, true);
+  assert.equal(next.some((r) => r.id === "live"), false);
+});
+
+test("npmTapeCommand quotes secrets so a pasted value cannot break the shell", () => {
+  assert.equal(GV.npmTapeCommand(""), "npm run tape");
+  assert.equal(GV.npmTapeCommand("abc123"), "TAPE_SECRET='abc123' npm run tape");
+  assert.equal(GV.npmTapeCommand("x'$(reboot)"), "TAPE_SECRET='x'\\''$(reboot)' npm run tape");
 });
 
 test("queueCopyText ranks by list-to-tape gap and caps at 40", () => {
@@ -144,5 +178,9 @@ test("content script and side panel call extracted overlay helpers", () => {
   assert.match(ebay, /GV\.lastReadPayload\(/);
   assert.match(panel, /GV\.formatLastRead\(/);
   assert.match(panel, /GV\.queueCopyText\(/);
+  assert.match(ebay, /GV\.listedAsk\(/);
+  assert.match(ebay, /GV\.mergeKeepIntoSoldTape\(/);
+  assert.match(ebay, /soldTape = \[\]/);
+  assert.match(ebay, /readGen/);
   assert.deepEqual(manifest.content_scripts[0].js, ["lib/core.js", "lib/overlay.js", "content/ebay.js"]);
 });
