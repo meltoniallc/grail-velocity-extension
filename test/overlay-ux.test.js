@@ -117,7 +117,7 @@ test("lastReadPayload and formatLastRead drive the side panel status line", () =
     GV.formatLastRead(payload, 1_000),
     "Last read just now: Mercury #5 · 1/1 kept · FAST CASH · $98.00",
   );
-  assert.match(GV.formatLastRead(null, 1_000), /No tab read yet/);
+  assert.match(GV.formatLastRead(null, 1_000), /No tab scraped yet/);
   assert.match(GV.formatLastRead(null, 1_000), /Scrape this page/);
 });
 
