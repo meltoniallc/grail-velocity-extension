@@ -31,7 +31,7 @@ test("tape server parks noise in sqlite and does not require postgres", async ()
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "gv-tape-http-"));
   const sqlite = path.join(dir, "scratch.sqlite");
   const child = spawn(process.execPath, [path.join(__dirname, "..", "server", "index.js")], {
-    env: { ...process.env, PORT: "0", SQLITE_PATH: sqlite, TAPE_SECRET: "test-secret" },
+    env: { ...process.env, PORT: "0", SQLITE_PATH: sqlite, TAPE_SECRET: "test-secret", DATABASE_URL: "" },
     stdio: ["ignore", "ignore", "pipe"],
   });
   try {
@@ -88,7 +88,7 @@ test("tape server caps bodies, minimizes pre-auth health, and omits CORS", async
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "gv-tape-hard-"));
   const sqlite = path.join(dir, "scratch.sqlite");
   const child = spawn(process.execPath, [path.join(__dirname, "..", "server", "index.js")], {
-    env: { ...process.env, PORT: "0", SQLITE_PATH: sqlite, TAPE_SECRET: "test-secret" },
+    env: { ...process.env, PORT: "0", SQLITE_PATH: sqlite, TAPE_SECRET: "test-secret", DATABASE_URL: "" },
     stdio: ["ignore", "ignore", "pipe"],
   });
   try {

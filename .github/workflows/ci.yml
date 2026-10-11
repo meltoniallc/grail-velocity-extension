@@ -11,14 +11,15 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    timeout-minutes: 10
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Set up Node
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
           cache: "npm"
 
       - name: Install dependencies
@@ -27,9 +28,5 @@ jobs:
       - name: Run tests
         run: npm test
 
-      - name: Lint with stylelint (if needed)
-        # Placeholder for CSS/HTML lint if project grows
-
-      - name: Check for secrets (basic)
-        run: |
-          git diff --cached | grep -i "TOKEN\|SECRET\|key" && echo "Potential secrets in staged changes" || true
+      - name: Check for committed secrets
+        run: node scripts/check-secrets.js
