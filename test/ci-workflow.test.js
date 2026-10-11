@@ -31,6 +31,8 @@ test("CI workflow steps each have run or uses so GitHub can start the job", () =
   }
   assert.doesNotMatch(yml, /Placeholder for CSS\/HTML lint/);
   assert.doesNotMatch(yml, /git diff --cached/);
+  assert.match(yml, /node-version:\s*"22"/);
+  assert.doesNotMatch(yml, /node-version:\s*"20"/);
 });
 
 test("secret scanner is clean on this checkout", () => {
