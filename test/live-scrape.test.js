@@ -147,3 +147,42 @@ test("cashFromTape never uses catalog book Fast-Cash", () => {
   const sku = { fastCash: 114.99, listPrice: 875 };
   assert.notEqual(sku.fastCash, cash.value);
 });
+
+test("live 'N sold' captions stay asks; only Sold Month D, YYYY is a sold date", () => {
+  const liveQty = GV.listingKind({ caption: "3 sold" });
+  assert.equal(liveQty.kind, "active");
+  assert.equal(liveQty.soldDate, null);
+  assert.equal(GV.listingKind({ caption: "20+ sold" }).kind, "active");
+  const dated = GV.listingKind({ caption: "Sold Jan 2, 2026" });
+  assert.equal(dated.kind, "sold");
+  assert.equal(dated.soldDate, "Jan 2, 2026");
+  assert.equal(GV.listingKind({ caption: "", soldSearch: true }).kind, "sold");
+});
+
+test("item id comes from a path that ends at the numeric id", () => {
+  assert.equal(GV.itemIdFromPath("/itm/123456789012"), "123456789012");
+  assert.equal(GV.itemIdFromPath("/itm/Title-Here/123456789012"), "123456789012");
+  assert.equal(GV.itemIdFromPath("/itm/123456789012/"), "123456789012");
+  assert.equal(GV.itemIdFromPath("/sch/i.html"), null);
+});
+
+test("legacy snapshots without kind or soldDate do not re-enter Fast-Cash", async () => {
+  const query = "2023-24 Topps Mercury Victor Wembanyama #5 Refractor 74/99";
+  const adapter = memoryAdapter({
+    snapshots: [
+      {
+        query,
+        queryNorm: GV.fold(query),
+        comps: [
+          { id: "legacy-live", title: "live ask", price: 9, keep: true },
+          { id: "legacy-sold", title: "sold", price: 120, keep: true, soldDate: "Jan 2, 2026" },
+        ],
+      },
+    ],
+  });
+  const migrated = Tape.create(adapter);
+  const snap = await migrated.getSnapshot(query);
+  assert.equal(snap.comps.length, 1);
+  assert.equal(snap.comps[0].id, "legacy-sold");
+  assert.equal(snap.comps[0].kind, "sold");
+});

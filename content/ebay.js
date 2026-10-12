@@ -9,7 +9,7 @@
   let scanMeta = { stoppedAt: null, nCliff: 0, nRaw: 0, nKept: 0 };
   let pageMode = "page";
   let scraping = false;
-  let scrapeLock = false;
+  let readGen = 0;
   let velocity = null;
   let sku = null;
   let query = "";
@@ -171,7 +171,7 @@
     const cash = GV.cashFromTape(velocity);
     const fast = cash.value;
     const bookRef = sku?.fastCash ?? null;
-    const listed = sku?.listPrice ?? (pageMode === "sold" ? null : pageRows.find((row) => row.keep)?.price) ?? null;
+    const listed = GV.listedAsk(pageMode, sku, pageRows);
     const gap = listed != null && fast != null ? listed - fast : null;
     const action = (velocity?.action || "QUARANTINE").toLowerCase();
     const kept = pageRows.filter((row) => row.keep);
@@ -354,14 +354,16 @@
     if (!snapshot?.comps?.length) return;
     const byId = new Map(soldTape.map((row) => [row.id, row]));
     for (const comp of snapshot.comps) {
+      if (comp.kind === "active") continue;
       byId.set(comp.id, {
         ...comp,
+        kind: "sold",
         keep: true,
         flags: comp.flags || [],
         reason: comp.reason || "Cached sold tape",
       });
     }
-    soldTape = [...byId.values()];
+    soldTape = [...byId.values()].filter((row) => row.kind !== "active");
   }
 
   async function loadSnapshot(q) {
@@ -469,7 +471,7 @@
       const id = btn.getAttribute("data-id");
       pageRows = pageRows.map((row) => (row.id === id ? { ...row, keep: !row.keep } : row));
       if (pageMode === "sold") {
-        soldTape = GV.soldVerified(pageRows);
+        soldTape = GV.mergeKeepIntoSoldTape(soldTape, pageRows);
       }
       recompute();
       lastSig = sigNow();
@@ -479,12 +481,10 @@
   }
 
   function recompute() {
-    const listedAsk =
-      pageMode === "sold" ? sku?.listPrice ?? null : pageRows.find((row) => row.keep)?.price ?? sku?.listPrice ?? null;
     velocity = GV.scoreVelocity({
-      verified: soldTape.filter((row) => row.keep),
+      verified: soldTape.filter((row) => row.keep && GV.isSoldComp(row)),
       cogs: sku?.cogs || 0,
-      listPrice: listedAsk,
+      listPrice: GV.listedAsk(pageMode, sku, pageRows),
       settings,
       category: sku?.category,
     });
@@ -520,8 +520,7 @@
   }
 
   async function read(force = false) {
-    if (scrapeLock) return;
-    scrapeLock = true;
+    const gen = (readGen += 1);
     scraping = true;
     const prevQ = query;
     const prevKeep = new Map(pageRows.map((row) => [row.id, row.keep]));
@@ -531,8 +530,10 @@
     render();
     try {
       const cached = await chrome.runtime.sendMessage({ type: "GV_TAPE_GET", query }).catch(() => null);
+      if (gen !== readGen) return;
       if (cached?.snapshot?.comps?.length) applySoldTape(cached.snapshot);
       const listings = await scrapeListings();
+      if (gen !== readGen) return;
       const result = GV.verifyComps(query, listings);
       scanMeta = {
         stoppedAt: result.stoppedAt,
@@ -560,20 +561,23 @@
             velocity,
             url: location.href,
           });
+          if (gen !== readGen) return;
           if (put?.snapshot) applySoldTape(put.snapshot);
           recompute();
         } catch {
           /* local only */
         }
       }
+      if (gen !== readGen) return;
       const next = sigNow();
       if (!force && next === lastSig) return;
       lastSig = next;
       writeLastRead();
     } finally {
-      scraping = false;
-      scrapeLock = false;
-      render();
+      if (gen === readGen) {
+        scraping = false;
+        render();
+      }
     }
   }
 
@@ -609,8 +613,12 @@
       query = GV.pageQuery();
       typeQuery = query;
       pageRows = [];
+      soldTape = [];
+      sku = null;
+      velocity = null;
       applied = null;
       lastSig = "";
+      scanMeta = { stoppedAt: null, nCliff: 0, nRaw: 0, nKept: 0 };
       render();
       if (GV.isSoldSearch() || GV.isSearchPage() || GV.isListingOrRevise()) {
         read(true);

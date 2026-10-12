@@ -1,4 +1,4 @@
-Grail Velocity v1.2.3 — Fast-Cash is sold tape only.
+Grail Velocity v1.2.4 — Fast-Cash is sold tape only.
 
 Build (from repo root):
   npm run package
@@ -9,8 +9,8 @@ Build (from repo root):
 3. chrome://extensions → Developer mode ON → Load unpacked → that folder
    Not the zip. Not grok-workspace. Not Downloads.
 4. Pin it. Stay signed into eBay.
-5. Sold + Completed search → overlay → Scrape solds.
-   Chip must say TAPE before you Apply.
+5. Any eBay tab → overlay → Scrape this page (live, listing, or solds).
+   Chip must say TAPE before you Apply. Live asks never set Fast-Cash.
 6. Book ref is catalog, not this page. Do not apply it.
 7. Operator UX: SPA rescan, Alt+Shift+G toggle, Copy findings,
    side panel last-read status + Copy queue.

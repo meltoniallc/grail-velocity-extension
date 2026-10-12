@@ -4,7 +4,7 @@ Chromium MV3 overlay. Reads eBay sold tape as you. Fast-Cash is **sold tape only
 
 ## Status
 
-**v1.2.3**
+**v1.2.4**
 
 - Fast-Cash chip says **TAPE** or **NO TAPE**. Catalog book price is labeled Book ref and cannot be Applied.
 - Scrape any eBay tab. Live BIN/asks never write Fast-Cash.
@@ -13,6 +13,8 @@ Chromium MV3 overlay. Reads eBay sold tape as you. Fast-Cash is **sold tape only
 - Tape server: 1MB body cap, pre-auth `/health` is `{ok:true}` with no CORS, secret file is `0600`.
 - Operator UX: SPA MutationObserver rescan (keeps toggles), Alt+Shift+G panel toggle, Copy findings, status feedback, side panel last-read + Copy queue.
 - Operator UX helpers live in `lib/overlay.js` and ship in the zip (required by the overlay).
+- SPA navigation clears the previous card's sold tape so Fast-Cash cannot leak across queries.
+- Live captions like "3 sold" stay asks. Sold comps need a Sold date or a sold-search page.
 
 ## Load
 
@@ -28,7 +30,7 @@ Chromium MV3 overlay. Reads eBay sold tape as you. Fast-Cash is **sold tape only
 | Fast-Cash **TAPE** | P25 × 0.98 of verified **sold** comps on/cached for this query |
 | Fast-Cash **NO TAPE** | No price. Open solds and scrape. |
 | Book ref | Stale catalog ask from `catalog.json`. Display only. |
-| Listed | Your book BIN, or the live ask on a listing |
+| Listed | Live ask on this page. Empty on sold search. Catalog BIN is Book ref only. |
 | kept / dropped | Title identity vs the search (set, #, print run, player) |
 
 Need 2 tight (85%+) or 3 verified solds. One cheap near-miss cannot pull the tape.
