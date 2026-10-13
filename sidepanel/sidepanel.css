@@ -21,7 +21,7 @@ body.panel ul { max-height: none; }
 li.empty {
   margin: 8px;
   padding: 14px;
-  border-radius: 8px;
+  border-radius: 2px;
   background: var(--surface);
   color: var(--muted);
   font-size: 13px;

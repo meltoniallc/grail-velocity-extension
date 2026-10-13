@@ -1,4 +1,11 @@
-importScripts("lib/core.js", "lib/tape.js");
+importScripts(
+  "lib/core.js",
+  "lib/tape.js",
+  "lib/cardfields.js",
+  "lib/observe.js",
+  "lib/outbox.js",
+  "lib/capture-runtime.js",
+);
 
 chrome.runtime.onInstalled.addListener(() => {
   if (chrome.sidePanel?.setPanelBehavior) {
@@ -139,3 +146,113 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
   return false;
 });
+
+let captureRuntimePromise;
+
+function captureRuntime() {
+  if (!captureRuntimePromise) {
+    captureRuntimePromise = Promise.resolve(globalThis.GVOutbox.createIdbOutbox()).then((outbox) =>
+      globalThis.GVCaptureRuntime.createCaptureRuntime({
+        storage: {
+          get: (keys) => chrome.storage.local.get(keys),
+          set: (values) => chrome.storage.local.set(values),
+        },
+        outbox,
+        now: () => Date.now(),
+        setBadge: async (text) => {
+          await chrome.action.setBadgeText({ text });
+          await chrome.action.setBadgeBackgroundColor({ color: "#d4af37" });
+          if (chrome.action.setBadgeTextColor) await chrome.action.setBadgeTextColor({ color: "#050505" });
+        },
+        postObserve: async (rows) => {
+          const settings = await chrome.storage.local.get(["tapeApi", "tapeSecret"]);
+          const endpoint = String(settings.tapeApi || "").replace(/\/+$/, "");
+          if (!endpoint) return { ok: false, error: "no-api" };
+          const headers = { "Content-Type": "application/json" };
+          if (settings.tapeSecret) headers["X-Tape-Secret"] = String(settings.tapeSecret);
+          const res = await fetch(`${endpoint}/observe`, {
+            method: "POST",
+            headers,
+            body: JSON.stringify({ observations: rows }),
+          });
+          if (!res.ok) return { ok: false, status: res.status, error: `status ${res.status}` };
+          return { ok: true, status: res.status };
+        },
+        searchObserved: async (q) => {
+          const settings = await chrome.storage.local.get(["tapeApi", "tapeSecret"]);
+          const endpoint = String(settings.tapeApi || "").replace(/\/+$/, "");
+          if (!endpoint) return [];
+          const headers = {};
+          if (settings.tapeSecret) headers["X-Tape-Secret"] = String(settings.tapeSecret);
+          const res = await fetch(`${endpoint}/comps?q=${encodeURIComponent(q)}`, { headers });
+          if (!res.ok) return [];
+          const body = await res.json();
+          return Array.isArray(body.hits) ? body.hits : [];
+        },
+      }),
+    );
+  }
+  return captureRuntimePromise;
+}
+
+chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+  if (msg?.type === "GV_OBSERVE") {
+    (async () => {
+      try {
+        const runtime = await captureRuntime();
+        sendResponse(await runtime.onObserve(msg.pageUrl, msg.observations));
+      } catch (err) {
+        sendResponse({ ok: false, error: String(err.message || err) });
+      }
+    })();
+    return true;
+  }
+  if (msg?.type === "GV_CAPTURE_STATUS") {
+    (async () => {
+      const runtime = await captureRuntime();
+      sendResponse(await runtime.status());
+    })();
+    return true;
+  }
+  if (msg?.type === "GV_CAPTURE_SETTINGS") {
+    (async () => {
+      const runtime = await captureRuntime();
+      await runtime.update(msg.patch || {});
+      sendResponse(await runtime.status());
+    })();
+    return true;
+  }
+  if (msg?.type === "GV_CAPTURE_PAUSE") {
+    (async () => {
+      const runtime = await captureRuntime();
+      await runtime.pauseFor(msg.ms || 60 * 60 * 1000);
+      sendResponse(await runtime.status());
+    })();
+    return true;
+  }
+  if (msg?.type === "GV_CAPTURE_FLUSH") {
+    (async () => {
+      const runtime = await captureRuntime();
+      sendResponse(await runtime.flush());
+    })();
+    return true;
+  }
+  if (msg?.type === "GV_COMP_LOOKUP") {
+    (async () => {
+      const runtime = await captureRuntime();
+      sendResponse({ hits: await runtime.lookup(msg.q || "") });
+    })();
+    return true;
+  }
+  return false;
+});
+
+if (chrome.alarms) {
+  chrome.alarms.create("gv-observe-flush", { periodInMinutes: 1 });
+  chrome.alarms.onAlarm.addListener((alarm) => {
+    if (alarm.name !== "gv-observe-flush") return;
+    captureRuntime()
+      .then((runtime) => runtime.flush())
+      .catch(() => {});
+  });
+}
