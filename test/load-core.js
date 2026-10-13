@@ -9,6 +9,10 @@ function makeCtx() {
   ctx.self = ctx;
   ctx.window = ctx;
   ctx.globalThis = ctx;
+  ctx.crypto = globalThis.crypto;
+  ctx.TextEncoder = TextEncoder;
+  ctx.URL = URL;
+  ctx.URLSearchParams = URLSearchParams;
   return ctx;
 }
 
