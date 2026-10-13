@@ -183,6 +183,18 @@ test("content script and side panel call extracted overlay helpers", () => {
   assert.match(ebay, /GV\.mergeKeepIntoSoldTape\(/);
   assert.match(ebay, /soldTape = \[\]/);
   assert.match(ebay, /readGen/);
-  assert.deepEqual(manifest.content_scripts[0].js, ["lib/core.js", "lib/overlay.js", "content/ebay.js"]);
+  assert.deepEqual(manifest.content_scripts[0].js, [
+    "lib/core.js",
+    "lib/overlay.js",
+    "lib/cardfields.js",
+    "lib/observe.js",
+    "content/parsers/common.js",
+    "content/parsers/cards.js",
+    "content/parsers/ebay-item.js",
+    "content/parsers/ebay-sold-search.js",
+    "content/parsers/ebay-active-search.js",
+    "content/capture.js",
+    "content/ebay.js",
+  ]);
   assert.match(demo, /lib\/overlay\.js/);
 });

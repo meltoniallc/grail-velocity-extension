@@ -1,0 +1,32 @@
+[
+  {
+    "cardsight_id": "cs-wemb-1",
+    "title": "2023-24 Topps Chrome Victor Wembanyama #1 Refractor PSA 10 /99",
+    "sold_price": 425,
+    "sold_date": "2026-02-01",
+    "ebay_item_id": "123456789012",
+    "accepted_offer": false
+  },
+  {
+    "cardsight_id": "cs-wemb-1b",
+    "title": "2023-24 Topps Chrome Victor Wembanyama #1 Refractor PSA 10 12/99",
+    "sold_price": 410,
+    "sold_date": "2026-02-11",
+    "ebay_item_id": "123456789012",
+    "accepted_offer": true
+  },
+  {
+    "cardsight_id": "cs-harper",
+    "title": "2024 Bowman Chrome Bryce Harper #10 Auto",
+    "sold_price": 80,
+    "sold_date": "2026-03-01",
+    "ebay_item_id": "223456789012"
+  },
+  {
+    "cardsight_id": "cs-now",
+    "title": "2024 Topps Now Victor Wembanyama #12",
+    "sold_price": 20,
+    "sold_date": "2026-04-01",
+    "ebay_item_id": "323456789012"
+  }
+]
