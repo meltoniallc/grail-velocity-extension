@@ -3,6 +3,7 @@
 const http = require("node:http");
 const path = require("node:path");
 const { openScratch, writeScratch, writePostgres, suggestPostgres } = require("./store");
+const { ingestObservations, searchObservations } = require("./observe");
 const { resolveSecret } = require("./secret");
 
 const PORT = Number(process.env.PORT || 8787);
@@ -91,6 +92,26 @@ const server = http.createServer(async (req, res) => {
     if (req.method === "GET" && url.pathname === "/suggest") {
       const hits = await suggestPostgres(pool, url.searchParams.get("q") || "", 8);
       send(res, 200, { hits, source: pool ? "postgres" : "none" });
+      return;
+    }
+    if (req.method === "POST" && url.pathname === "/observe") {
+      const payload = await readBody(req);
+      const list = Array.isArray(payload.observations) ? payload.observations : null;
+      if (!list) {
+        send(res, 400, { ok: false, error: "observations array required" });
+        return;
+      }
+      if (list.length > 80) {
+        send(res, 400, { ok: false, error: "too many observations" });
+        return;
+      }
+      const result = await ingestObservations(scratch, pool, list);
+      send(res, 200, { ok: true, scratch: "sqlite", ...result });
+      return;
+    }
+    if (req.method === "GET" && url.pathname === "/comps") {
+      const hits = searchObservations(scratch, url.searchParams.get("q") || "", 8);
+      send(res, 200, { hits });
       return;
     }
     if (req.method === "POST" && url.pathname === "/tape") {
