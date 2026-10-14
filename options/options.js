@@ -118,4 +118,74 @@ document.getElementById("pull").addEventListener("click", async () => {
   }
 });
 
+const SCRATCH_LIMIT = 24;
+
+function paintScratchReasons(reasons, emptyText) {
+  const ul = document.getElementById("scratchList");
+  if (!ul) return;
+  const list = reasons || [];
+  if (!list.length) {
+    ul.innerHTML = `<li class="empty">${emptyText || "No scratch for this query."}</li>`;
+    return;
+  }
+  ul.innerHTML = list
+    .map((r) => {
+      const bucket = String(r.bucket || "dropped");
+      const title = String(r.title || "—")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/"/g, "&quot;");
+      const reason = String(r.reason || bucket)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;");
+      const price = r.priceLabel || (r.price != null ? globalThis.GV.money(r.price) : "—");
+      return `<li><span class="bucket ${bucket}">${bucket}</span> ${title}<br /><span style="color:var(--subtle)">${reason} · ${price}</span></li>`;
+    })
+    .join("");
+}
+
+async function inspectScratch(remote) {
+  await save();
+  const query = document.getElementById("pullQuery").value.trim();
+  if (!query) {
+    setStatus("Enter a query to inspect scratch.", "bad");
+    paintScratchReasons([], "Enter a query first.");
+    return;
+  }
+  setStatus(remote ? "Reading server scratch…" : "Reading local scratch…");
+  try {
+    const res = await chrome.runtime.sendMessage({
+      type: remote ? "GV_SCRATCH_REMOTE" : "GV_SCRATCH_GET",
+      query,
+      limit: SCRATCH_LIMIT,
+    });
+    if (!res?.ok) {
+      setStatus(res?.error || "Scratch inspect failed.", "bad");
+      paintScratchReasons([], "Could not load scratch.");
+      return;
+    }
+    const payload = remote ? res.listings || [] : res;
+    const reasons = globalThis.GV.scratchReasons(payload, { limit: SCRATCH_LIMIT });
+    paintScratchReasons(
+      reasons,
+      remote ? "No SQLite scratch for this query (or TTL expired)." : "No local scratch for this query.",
+    );
+    const n = reasons.length;
+    setStatus(
+      n
+        ? `${n} scratch reason${n === 1 ? "" : "s"} (${res.source || (remote ? "sqlite" : "local")}). Scratch never feeds Fast-Cash.`
+        : remote
+          ? "No server scratch for that query."
+          : "No local scratch for that query.",
+      n ? "ok" : "bad",
+    );
+  } catch (err) {
+    setStatus(String(err.message || err), "bad");
+    paintScratchReasons([], "Could not load scratch.");
+  }
+}
+
+document.getElementById("scratchLocal").addEventListener("click", () => inspectScratch(false));
+document.getElementById("scratchRemote").addEventListener("click", () => inspectScratch(true));
+
 load();

@@ -18,6 +18,13 @@
       #status.ok { color: var(--ok); }
       #status.bad { color: var(--danger); }
       code { font-family: ui-monospace, Menlo, monospace; font-size: 11px; }
+      .scratch-list { list-style: none; margin: 8px 0 0; padding: 0; max-height: 220px; overflow: auto; display: grid; gap: 6px; }
+      .scratch-list li { font-size: 12px; line-height: 1.4; color: var(--fg); padding: 6px 8px; background: var(--raised); border-radius: 4px; }
+      .scratch-list .bucket { display: inline-block; min-width: 5.5em; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+      .scratch-list .bucket.cliff { color: var(--warn); }
+      .scratch-list .bucket.weak_title { color: var(--warn); }
+      .scratch-list .bucket.active { color: var(--ok); }
+      .scratch-list .empty { color: var(--subtle); background: transparent; padding: 0; }
     </style>
   </head>
   <body>
@@ -45,10 +52,16 @@
         <button type="button" class="secondary" id="check">Check connection</button>
         <button id="save" type="submit">Save</button>
       </div>
-      <label for="pullQuery">Pull query</label>
+      <label for="pullQuery">Pull / inspect query</label>
       <input id="pullQuery" type="text" placeholder="e.g. 2023-24 Topps Mercury … #5 Refractor 74/99" autocomplete="off" spellcheck="false" />
       <p class="help" style="margin-top:0">Cold Chrome / cleared storage: pull verified solds for one query from Postgres into local tape. Scratch and live asks stay out of Fast-Cash.</p>
       <button type="button" class="secondary" id="pull">Pull from server</button>
+      <p class="help">Scratch inspector: last parked reasons for this query (cliff / weak_title / active ask). Local Chrome tape first; optional server read is SQLite only (7d TTL) and never feeds Fast-Cash.</p>
+      <div class="row">
+        <button type="button" class="secondary" id="scratchLocal">Inspect local scratch</button>
+        <button type="button" class="secondary" id="scratchRemote">Inspect server scratch</button>
+      </div>
+      <ul id="scratchList" class="scratch-list" aria-live="polite"></ul>
       <p id="status"></p>
     </form>
     <script src="../lib/core.js"></script>

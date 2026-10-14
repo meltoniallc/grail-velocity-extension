@@ -5,7 +5,15 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
-const { openScratch, writeScratch, getTapePostgres, tapeQueryNorm } = require("../server/store");
+const {
+  openScratch,
+  writeScratch,
+  getTapePostgres,
+  getScratchSqlite,
+  scratchBucket,
+  tapeQueryNorm,
+  SCRATCH_TTL_MS,
+} = require("../server/store");
 const { loadScripts } = require("./load-core");
 
 const { GV, GVTape } = loadScripts(["lib/core.js", "lib/tape.js"]);
@@ -98,6 +106,60 @@ test("page_scans persists capture meta including stopped_at", async () => {
   assert.equal(mem.scratch[0].mode, "auto");
   assert.equal(mem.scratch[0].pageMode, "sold");
   assert.equal(mem.scratch[0].stoppedAt, verified.stoppedAt);
+});
+
+test("getScratchSqlite returns last N reasons without touching postgres", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "gv-scratch-get-"));
+  const db = openScratch(path.join(dir, "scratch.sqlite"));
+  const query = "2023-24 Topps Mercury Victor Wembanyama #5 Refractor 74/99";
+  const norm = tapeQueryNorm(query);
+  writeScratch(db, {
+    snapshot: { query, queryNorm: norm, nRaw: 3, nKept: 0, nCliff: 1 },
+    scratch: {
+      query,
+      queryNorm: norm,
+      mode: "manual",
+      pageMode: "sold",
+      nCliff: 1,
+      listings: [
+        {
+          id: "live",
+          title: "2023-24 Topps Mercury Victor Wembanyama #5 Refractor 11/99",
+          price: 150,
+          kind: "active",
+          keep: true,
+          flags: [],
+          reason: "Tight title match",
+        },
+        {
+          id: "weak",
+          title: "Mercury Wemby near miss",
+          price: 40,
+          kind: "dropped",
+          flags: ["weak_title"],
+          reason: "weak_title",
+        },
+        {
+          id: "cliff",
+          title: "Random bulk commons lot",
+          price: 2,
+          kind: "dropped",
+          flags: ["beyond_cliff"],
+          reason: "Past eBay relevance cliff",
+        },
+      ],
+    },
+  });
+  const pulled = getScratchSqlite(db, query, 10);
+  assert.equal(pulled.source, "sqlite");
+  assert.equal(pulled.queryNorm, norm);
+  assert.equal(pulled.listings.length, 3);
+  assert.equal(scratchBucket(pulled.listings.find((l) => /bulk/i.test(l.title))), "cliff");
+  assert.equal(scratchBucket(pulled.listings.find((l) => /near miss/i.test(l.title))), "weak_title");
+  assert.equal(scratchBucket(pulled.listings.find((l) => /Refractor 11\/99/i.test(l.title))), "active");
+  assert.ok(pulled.scans.length >= 1);
+  assert.equal(pulled.scans[0].mode, "manual");
+  assert.ok(SCRATCH_TTL_MS === 7 * 24 * 3600 * 1000);
 });
 
 test("getTapePostgres returns snapshot + verified_prices for one query_norm", async () => {

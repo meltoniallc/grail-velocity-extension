@@ -183,6 +183,63 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     })();
     return true;
   }
+  if (msg?.type === "GV_SCRATCH_GET") {
+    (async () => {
+      try {
+        const query = msg.query || "";
+        const scratch = await store().getScratch(query);
+        sendResponse({
+          ok: true,
+          source: "local",
+          queryNorm: globalThis.GVTape.queryNorm(query),
+          listings: scratch.listings || [],
+          entries: scratch.entries || [],
+        });
+      } catch (err) {
+        sendResponse({ ok: false, error: String(err.message || err) });
+      }
+    })();
+    return true;
+  }
+  if (msg?.type === "GV_SCRATCH_REMOTE") {
+    (async () => {
+      try {
+        const cfg = await tapeEndpoint();
+        if (!cfg) {
+          sendResponse({ ok: false, error: "Set Tape API first." });
+          return;
+        }
+        const query = String(msg.query || "").trim();
+        if (!query) {
+          sendResponse({ ok: false, error: "Enter a query to inspect scratch." });
+          return;
+        }
+        const limit = msg.limit != null ? Number(msg.limit) : 40;
+        const url = `${cfg.endpoint}/scratch?q=${encodeURIComponent(query)}&limit=${encodeURIComponent(String(limit))}`;
+        const res = await fetch(url, { headers: cfg.headers });
+        if (res.status === 401) {
+          sendResponse({ ok: false, error: "Secret does not match." });
+          return;
+        }
+        if (!res.ok) {
+          sendResponse({ ok: false, error: `Tape API returned ${res.status}.` });
+          return;
+        }
+        const body = await res.json().catch(() => ({}));
+        sendResponse({
+          ok: true,
+          source: body.source || "sqlite",
+          queryNorm: body.queryNorm || "",
+          listings: Array.isArray(body.listings) ? body.listings : [],
+          scans: Array.isArray(body.scans) ? body.scans : [],
+          ttlDays: body.ttlDays || 7,
+        });
+      } catch (err) {
+        sendResponse({ ok: false, error: String(err.message || err) });
+      }
+    })();
+    return true;
+  }
   if (msg?.type === "GV_TAPE_PUT") {
     (async () => {
       const snapshot = await store().putScan({

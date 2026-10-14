@@ -8,6 +8,7 @@ const {
   writePostgres,
   suggestPostgres,
   getTapePostgres,
+  getScratchSqlite,
 } = require("./store");
 const { resolveSecret } = require("./secret");
 
@@ -111,6 +112,20 @@ const server = http.createServer(async (req, res) => {
         source: pulled.source,
         snapshot: pulled.snapshot,
         verifiedPrices: pulled.verifiedPrices || [],
+      });
+      return;
+    }
+    if (req.method === "GET" && url.pathname === "/scratch") {
+      // Local debug: SQLite rejected / cliff / active asks only. Auth required. 7d TTL.
+      const rawLimit = Number(url.searchParams.get("limit") || 40);
+      const pulled = getScratchSqlite(scratch, url.searchParams.get("q") || "", rawLimit);
+      send(res, 200, {
+        ok: true,
+        source: pulled.source,
+        queryNorm: pulled.queryNorm,
+        listings: pulled.listings,
+        scans: pulled.scans,
+        ttlDays: 7,
       });
       return;
     }
