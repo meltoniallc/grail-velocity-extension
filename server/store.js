@@ -238,6 +238,100 @@ async function suggestPostgres(pool, q, limit) {
   }));
 }
 
+/** Normalize q for exact tape_snapshots.query_norm lookup (client usually sends GV.fold). */
+function tapeQueryNorm(q) {
+  return String(q || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9#/.\s-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function parseCompsJson(raw) {
+  if (Array.isArray(raw)) return raw;
+  if (raw == null) return [];
+  if (typeof raw === "string") {
+    try {
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+
+/**
+ * Pull one query_norm from Postgres: tape_snapshots + verified_prices.
+ * Never reads SQLite scratch — Fast-Cash hydrate stays verified-sold only.
+ */
+async function getTapePostgres(pool, q) {
+  if (!pool) return { snapshot: null, verifiedPrices: [], source: "none" };
+  const norm = tapeQueryNorm(q);
+  if (!norm) return { snapshot: null, verifiedPrices: [], source: "postgres" };
+  await pool.query(postgresSchema());
+  const snapRes = await pool.query(
+    `SELECT query_norm, query_raw, n_kept, n_raw, n_cliff, median, p25, p75, fast_cash, comps_json, updated_at
+       FROM tape_snapshots
+      WHERE query_norm = $1
+      LIMIT 1`,
+    [norm],
+  );
+  const row = snapRes.rows[0] || null;
+  const pricesRes = await pool.query(
+    `SELECT query_norm, item_id, query_raw, title, price, match_score, sold_date, url, seen_at
+       FROM verified_prices
+      WHERE query_norm = $1
+      ORDER BY seen_at DESC`,
+    [norm],
+  );
+  const verifiedPrices = (pricesRes.rows || []).map((p) => ({
+    queryNorm: p.query_norm,
+    itemId: String(p.item_id || ""),
+    queryRaw: p.query_raw,
+    title: p.title,
+    price: p.price == null ? null : Number(p.price),
+    matchScore: p.match_score == null ? null : Number(p.match_score),
+    soldDate: p.sold_date || null,
+    url: p.url || null,
+    seenAt: p.seen_at ? new Date(p.seen_at).getTime() : null,
+  }));
+  if (!row && !verifiedPrices.length) {
+    return { snapshot: null, verifiedPrices: [], source: "postgres" };
+  }
+  const comps = parseCompsJson(row && row.comps_json);
+  const snapshot = row
+    ? {
+        query: row.query_raw,
+        queryNorm: row.query_norm,
+        title: row.query_raw,
+        nKept: row.n_kept,
+        nRaw: row.n_raw,
+        nCliff: row.n_cliff,
+        median: row.median == null ? null : Number(row.median),
+        p25: row.p25 == null ? null : Number(row.p25),
+        p75: row.p75 == null ? null : Number(row.p75),
+        fastCash: row.fast_cash == null ? null : Number(row.fast_cash),
+        comps,
+        at: row.updated_at ? new Date(row.updated_at).getTime() : undefined,
+      }
+    : {
+        query: verifiedPrices[0].queryRaw || q,
+        queryNorm: norm,
+        title: verifiedPrices[0].queryRaw || q,
+        nKept: verifiedPrices.length,
+        nRaw: verifiedPrices.length,
+        nCliff: 0,
+        median: null,
+        p25: null,
+        p75: null,
+        fastCash: null,
+        comps: [],
+        at: verifiedPrices[0].seenAt || undefined,
+      };
+  return { snapshot, verifiedPrices, source: "postgres" };
+}
+
 module.exports = {
   openScratch,
   writeScratch,
@@ -247,5 +341,8 @@ module.exports = {
   postgresSchema,
   writePostgres,
   suggestPostgres,
+  getTapePostgres,
+  tapeQueryNorm,
+  parseCompsJson,
   SCRATCH_TTL_MS,
 };

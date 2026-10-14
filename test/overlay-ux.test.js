@@ -208,6 +208,9 @@ test("content script and side panel call extracted overlay helpers", () => {
   assert.match(ebay, /function scheduleRead\(\) \{\s*\n\s*if \(!GV\.shouldScheduleAutoRead\(autoCapture\)\) return;/);
   assert.match(optsHtml, /id="autoCapture"/);
   assert.match(optsJs, /autoCapture/);
+  assert.match(optsHtml, /id="pull"/);
+  assert.match(optsHtml, /id="pullQuery"/);
+  assert.match(optsJs, /GV_TAPE_PULL/);
   assert.match(panel, /GV\.formatLastRead\(/);
   assert.match(panel, /GV\.queueCopyText\(/);
   assert.match(ebay, /GV\.listedAsk\(/);

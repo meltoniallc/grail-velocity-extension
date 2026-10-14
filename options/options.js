@@ -86,4 +86,36 @@ document.getElementById("check").addEventListener("click", async () => {
   }
 });
 
+document.getElementById("pull").addEventListener("click", async () => {
+  await save();
+  const query = document.getElementById("pullQuery").value.trim();
+  if (!query) {
+    setStatus("Enter a query to pull (one query_norm from Postgres).", "bad");
+    return;
+  }
+  setStatus("Pulling verified solds…");
+  try {
+    const res = await chrome.runtime.sendMessage({ type: "GV_TAPE_PULL", query });
+    if (!res?.ok) {
+      setStatus(res?.error || "Pull failed.", "bad");
+      return;
+    }
+    if (!res.hydrated) {
+      setStatus(
+        res.source === "none"
+          ? "Tape API has no Postgres (DATABASE_URL). Nothing to hydrate."
+          : "No verified solds on the server for that query.",
+        "bad",
+      );
+      return;
+    }
+    setStatus(
+      `Hydrated ${res.nComps} verified sold comp${res.nComps === 1 ? "" : "s"} into local tape. Scratch was not imported.`,
+      "ok",
+    );
+  } catch (err) {
+    setStatus(String(err.message || err), "bad");
+  }
+});
+
 load();

@@ -264,3 +264,130 @@ test("putScan coalesces remote push when snapshot and scratch set are unchanged"
     false,
   );
 });
+
+test("hydrateFromRemote fills cold Chrome tape with verified solds only", async () => {
+  const adapter = memoryAdapter();
+  const store = Tape.create(adapter);
+  const query = "2023-24 Topps Mercury Victor Wembanyama #5 Refractor 74/99";
+  const remote = {
+    source: "postgres",
+    snapshot: {
+      query,
+      queryNorm: GV.fold(query),
+      nKept: 2,
+      nRaw: 5,
+      nCliff: 1,
+      fastCash: 107.8,
+      comps: [
+        {
+          id: "a",
+          title: "2023-24 Topps Mercury Victor Wembanyama #5 Refractor 11/99",
+          price: 120,
+          matchScore: 0.95,
+          soldDate: "Sold Mar 1, 2026",
+          kind: "sold",
+        },
+        {
+          id: "live-leak",
+          title: "2023-24 Topps Mercury Victor Wembanyama #5 Refractor 12/99",
+          price: 999,
+          matchScore: 0.94,
+          kind: "active",
+        },
+      ],
+    },
+    verifiedPrices: [
+      {
+        itemId: "b",
+        title: "2023-24 Topps Mercury Victor Wembanyama #5 Refractor 22/99",
+        price: 110,
+        matchScore: 0.93,
+        soldDate: "Sold Mar 2, 2026",
+      },
+      {
+        itemId: "scratch-noise",
+        title: "2023 Panini Prizm Victor Wembanyama #5 Silver",
+        price: 4.99,
+        matchScore: 0.2,
+        // no soldDate / not sold kind — durableSoldComp rejects unless kind sold
+        kind: "active",
+      },
+    ],
+  };
+  const durable = Tape.durableCompsFromRemote(remote);
+  assert.equal(durable.some((c) => c.id === "live-leak"), false);
+  assert.equal(durable.some((c) => c.id === "scratch-noise"), false);
+  assert.ok(durable.some((c) => c.id === "a"));
+  assert.ok(durable.some((c) => c.id === "b"));
+
+  const snap = await store.hydrateFromRemote(remote);
+  assert.ok(snap);
+  assert.equal(snap.comps.length, 2);
+  assert.ok(snap.comps.every((c) => c.kind === "sold" && c.price >= 110));
+  assert.ok(snap.fastCash > 90);
+  assert.equal(adapter.bag.scratch.length, 0, "hydrate must not touch scratch");
+  assert.equal(snap.hydratedFrom, "postgres");
+});
+
+test("hydrateFromRemote keeps local durable comps over remote duplicates", async () => {
+  const query = "2023-24 Topps Mercury Victor Wembanyama #5 Refractor 74/99";
+  const adapter = memoryAdapter({
+    snapshots: [
+      {
+        query,
+        queryNorm: GV.fold(query),
+        comps: [
+          {
+            id: "a",
+            title: "2023-24 Topps Mercury Victor Wembanyama #5 Refractor 11/99",
+            price: 125,
+            matchScore: 0.96,
+            soldDate: "Sold Mar 1, 2026",
+            kind: "sold",
+            keep: true,
+          },
+        ],
+        nKept: 1,
+        nRaw: 1,
+        fastCash: 122.5,
+      },
+    ],
+  });
+  let pushed = 0;
+  adapter.pushRemote = async () => {
+    pushed += 1;
+    return { ok: true };
+  };
+  const store = Tape.create(adapter);
+  const snap = await store.hydrateFromRemote({
+    snapshot: {
+      query,
+      queryNorm: GV.fold(query),
+      comps: [
+        {
+          id: "a",
+          title: "remote duplicate",
+          price: 50,
+          matchScore: 0.9,
+          soldDate: "Sold Mar 1, 2026",
+          kind: "sold",
+        },
+        {
+          id: "c",
+          title: "2023-24 Topps Mercury Victor Wembanyama #5 Refractor 33/99",
+          price: 115,
+          matchScore: 0.92,
+          soldDate: "Sold Mar 3, 2026",
+          kind: "sold",
+        },
+      ],
+    },
+    verifiedPrices: [],
+  });
+  assert.equal(snap.comps.length, 2);
+  const local = snap.comps.find((c) => c.id === "a");
+  assert.equal(local.price, 125, "Chrome local wins on item id");
+  assert.ok(snap.comps.some((c) => c.id === "c"));
+  assert.equal(pushed, 0, "hydrate must not pushRemote");
+  assert.equal(adapter.bag.scratch.length, 0);
+});

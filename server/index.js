@@ -2,7 +2,13 @@
 
 const http = require("node:http");
 const path = require("node:path");
-const { openScratch, writeScratch, writePostgres, suggestPostgres } = require("./store");
+const {
+  openScratch,
+  writeScratch,
+  writePostgres,
+  suggestPostgres,
+  getTapePostgres,
+} = require("./store");
 const { resolveSecret } = require("./secret");
 
 const PORT = Number(process.env.PORT || 8787);
@@ -95,6 +101,17 @@ const server = http.createServer(async (req, res) => {
       // Tape snapshots only — never serve catalog/book as Fast-Cash.
       const tapeHits = (hits || []).filter((h) => h && h.kind === "tape");
       send(res, 200, { hits: tapeHits, source: pool ? "postgres" : "none" });
+      return;
+    }
+    if (req.method === "GET" && (url.pathname === "/tape" || url.pathname === "/snapshot")) {
+      // One query_norm: tape_snapshots + verified_prices. Never SQLite scratch.
+      const pulled = await getTapePostgres(pool, url.searchParams.get("q") || "");
+      send(res, 200, {
+        ok: true,
+        source: pulled.source,
+        snapshot: pulled.snapshot,
+        verifiedPrices: pulled.verifiedPrices || [],
+      });
       return;
     }
     if (req.method === "POST" && url.pathname === "/tape") {
