@@ -88,6 +88,58 @@ async function suggestWithRemoteFallback(q, limit) {
   return globalThis.GV.mergeSuggestHits(localHits, remoteHits, { limit });
 }
 
+/** Optional GET /tape?q= — verified solds only; never scratch. */
+async function fetchRemoteTape(q) {
+  const cfg = await tapeEndpoint();
+  if (!cfg) return null;
+  const needle = String(q || "").trim();
+  if (!needle) return null;
+  try {
+    const url = `${cfg.endpoint}/tape?q=${encodeURIComponent(needle)}`;
+    const res = await fetch(url, { headers: cfg.headers });
+    if (!res.ok) return null;
+    const body = await res.json().catch(() => null);
+    if (!body || body.ok === false) return null;
+    return {
+      source: body.source || "postgres",
+      snapshot: body.snapshot || null,
+      verifiedPrices: Array.isArray(body.verifiedPrices) ? body.verifiedPrices : [],
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Cold-start / Options pull: hydrate Chrome tapeSnapshots from Postgres.
+ * Local durable comps win; scratch is never imported; write path unchanged.
+ */
+async function pullAndHydrate(q) {
+  const remote = await fetchRemoteTape(q);
+  if (!remote) return { ok: false, error: "No Tape API response (is the server running?)." };
+  if (!remote.snapshot && !(remote.verifiedPrices || []).length) {
+    return { ok: true, snapshot: null, hydrated: false, source: remote.source };
+  }
+  const snapshot = await store().hydrateFromRemote(remote);
+  return {
+    ok: true,
+    snapshot,
+    hydrated: Boolean(snapshot),
+    source: remote.source,
+    nComps: snapshot ? (snapshot.comps || []).length : 0,
+  };
+}
+
+async function getSnapshotWithColdHydrate(q) {
+  const needle = String(q || "").trim();
+  let snapshot = await store().getSnapshot(needle);
+  if (snapshot && (snapshot.comps || []).length) return snapshot;
+  if (!needle) return snapshot;
+  const pulled = await pullAndHydrate(needle);
+  if (pulled.hydrated && pulled.snapshot) return pulled.snapshot;
+  return snapshot;
+}
+
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg?.type === "GV_OPEN_SIDEPANEL" && sender.tab?.id != null) {
     (async () => {
@@ -114,8 +166,20 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
   if (msg?.type === "GV_TAPE_GET") {
     (async () => {
-      const snapshot = await store().getSnapshot(msg.query || "");
+      // Cold local tape: optional Postgres hydrate (verified solds only).
+      const snapshot = await getSnapshotWithColdHydrate(msg.query || "");
       sendResponse({ snapshot });
+    })();
+    return true;
+  }
+  if (msg?.type === "GV_TAPE_PULL") {
+    (async () => {
+      try {
+        const result = await pullAndHydrate(msg.query || "");
+        sendResponse(result);
+      } catch (err) {
+        sendResponse({ ok: false, error: String(err.message || err) });
+      }
     })();
     return true;
   }

@@ -45,6 +45,10 @@
         <button type="button" class="secondary" id="check">Check connection</button>
         <button id="save" type="submit">Save</button>
       </div>
+      <label for="pullQuery">Pull query</label>
+      <input id="pullQuery" type="text" placeholder="e.g. 2023-24 Topps Mercury … #5 Refractor 74/99" autocomplete="off" spellcheck="false" />
+      <p class="help" style="margin-top:0">Cold Chrome / cleared storage: pull verified solds for one query from Postgres into local tape. Scratch and live asks stay out of Fast-Cash.</p>
+      <button type="button" class="secondary" id="pull">Pull from server</button>
       <p id="status"></p>
     </form>
     <script src="../lib/core.js"></script>

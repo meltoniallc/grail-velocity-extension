@@ -5,7 +5,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
-const { openScratch, writeScratch } = require("../server/store");
+const { openScratch, writeScratch, getTapePostgres, tapeQueryNorm } = require("../server/store");
 const { loadScripts } = require("./load-core");
 
 const { GV, GVTape } = loadScripts(["lib/core.js", "lib/tape.js"]);
@@ -98,4 +98,80 @@ test("page_scans persists capture meta including stopped_at", async () => {
   assert.equal(mem.scratch[0].mode, "auto");
   assert.equal(mem.scratch[0].pageMode, "sold");
   assert.equal(mem.scratch[0].stoppedAt, verified.stoppedAt);
+});
+
+test("getTapePostgres returns snapshot + verified_prices for one query_norm", async () => {
+  const query = "2023-24 Topps Mercury Victor Wembanyama #5 Refractor 74/99";
+  const norm = tapeQueryNorm(query);
+  assert.equal(norm, GV.fold(query));
+  const empty = await getTapePostgres(null, query);
+  assert.equal(empty.source, "none");
+  assert.equal(empty.snapshot, null);
+
+  const calls = [];
+  const pool = {
+    async query(sql, params) {
+      calls.push({ sql: String(sql), params });
+      if (/CREATE TABLE/i.test(sql)) return { rows: [] };
+      if (/FROM tape_snapshots/i.test(sql)) {
+        assert.equal(params[0], norm);
+        return {
+          rows: [
+            {
+              query_norm: norm,
+              query_raw: query,
+              n_kept: 2,
+              n_raw: 4,
+              n_cliff: 1,
+              median: 115,
+              p25: 110,
+              p75: 120,
+              fast_cash: 107.8,
+              comps_json: [
+                {
+                  id: "a",
+                  title: "2023-24 Topps Mercury Victor Wembanyama #5 Refractor 11/99",
+                  price: 120,
+                  matchScore: 0.95,
+                  kind: "sold",
+                  soldDate: "Sold Mar 1, 2026",
+                },
+              ],
+              updated_at: new Date("2026-03-10T00:00:00Z"),
+            },
+          ],
+        };
+      }
+      if (/FROM verified_prices/i.test(sql)) {
+        assert.equal(params[0], norm);
+        return {
+          rows: [
+            {
+              query_norm: norm,
+              item_id: "b",
+              query_raw: query,
+              title: "2023-24 Topps Mercury Victor Wembanyama #5 Refractor 22/99",
+              price: "110.00",
+              match_score: "0.9300",
+              sold_date: "Sold Mar 2, 2026",
+              url: "https://www.ebay.com/itm/b",
+              seen_at: new Date("2026-03-10T00:00:00Z"),
+            },
+          ],
+        };
+      }
+      return { rows: [] };
+    },
+  };
+  const pulled = await getTapePostgres(pool, query);
+  assert.equal(pulled.source, "postgres");
+  assert.ok(pulled.snapshot);
+  assert.equal(pulled.snapshot.queryNorm, norm);
+  assert.equal(pulled.snapshot.fastCash, 107.8);
+  assert.equal(pulled.snapshot.comps.length, 1);
+  assert.equal(pulled.verifiedPrices.length, 1);
+  assert.equal(pulled.verifiedPrices[0].itemId, "b");
+  assert.equal(pulled.verifiedPrices[0].price, 110);
+  assert.ok(calls.some((c) => /FROM tape_snapshots/i.test(c.sql)));
+  assert.ok(calls.some((c) => /FROM verified_prices/i.test(c.sql)));
 });
