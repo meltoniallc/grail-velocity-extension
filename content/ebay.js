@@ -25,6 +25,9 @@
   let lastSig = "";
   let observeTimer = null;
   let statusTimer = null;
+  let canContinueSolds = false;
+  let nextSoldHref = null;
+  let followingSoldPage = false;
 
   function cssUrl() {
     return chrome.runtime.getURL("content/overlay.css");
@@ -264,6 +267,11 @@
             ${esc(scrapeLabel())}
           </button>
           <button class="gv-btn ghost" type="button" data-act="sold">Open solds</button>
+          ${
+            canContinueSolds
+              ? `<button class="gv-btn ghost" type="button" data-act="continue-solds"${scraping || followingSoldPage ? " disabled" : ""}>Continue solds</button>`
+              : ""
+          }
           <button class="gv-btn ${pageMode === "listing" ? "primary" : "ghost"}" type="button" data-act="apply"${fast == null ? " disabled" : ""}>
             ${applied != null ? "Applied " + GV.money(applied) : "Apply Fast-Cash"}
           </button>
@@ -440,6 +448,10 @@
       if (q) location.href = GV.soldUrl(q);
       return;
     }
+    if (act === "continue-solds") {
+      followNextSoldPage("manual");
+      return;
+    }
     if (act === "copy") {
       const fast = GV.cashFromTape(velocity).value;
       if (fast == null) return;
@@ -466,6 +478,7 @@
       return;
     }
     if (act === "hit") {
+      // Typeahead never opens sold tabs — load retained tape only.
       const q = btn.getAttribute("data-q");
       typeQuery = q;
       suggests = [];
@@ -518,6 +531,34 @@
         }),
       })
       .catch(() => {});
+  }
+
+  function updateContinueSolds(scan) {
+    const info = GV.soldSearchPage(location.href);
+    const page = info?.page || 1;
+    const nextUrl = pageMode === "sold" ? GV.nextSoldPageUrl(location.href, query) : null;
+    nextSoldHref = nextUrl;
+    canContinueSolds = GV.shouldContinueSoldPages({
+      pageMode,
+      page,
+      nKept: scan?.nKept ?? scanMeta.nKept,
+      nCliff: scan?.nCliff ?? scanMeta.nCliff,
+      nRaw: scan?.nRaw ?? scanMeta.nRaw,
+      nextUrl,
+      maxPages: GV.SOLD_PAGE_CAP,
+    });
+  }
+
+  function followNextSoldPage(reason) {
+    if (!canContinueSolds || !nextSoldHref) return false;
+    if (followingSoldPage) return false;
+    followingSoldPage = true;
+    setStatus(
+      reason === "auto" ? "Auto-following next sold page…" : "Opening next sold page…",
+      4000,
+    );
+    location.href = nextSoldHref;
+    return true;
   }
 
   async function scrapeListings() {
@@ -591,10 +632,24 @@
         }
       }
       if (gen !== readGen) return;
+      updateContinueSolds(result);
       const next = sigNow();
-      if (!force && next === lastSig) return;
-      lastSig = next;
-      writeLastRead();
+      if (!force && next === lastSig) {
+        /* still allow sold pagination after identical sig */
+      } else {
+        lastSig = next;
+        writeLastRead();
+      }
+      // Auto-follow next sold page only on sold-search, never from typeahead.
+      if (
+        captureMode === "auto" &&
+        GV.shouldScheduleAutoRead(autoCapture) &&
+        canContinueSolds &&
+        nextSoldHref
+      ) {
+        followNextSoldPage("auto");
+        return;
+      }
     } finally {
       if (gen === readGen) {
         scraping = false;
@@ -642,6 +697,9 @@
       velocity = null;
       applied = null;
       lastSig = "";
+      canContinueSolds = false;
+      nextSoldHref = null;
+      followingSoldPage = false;
       scanMeta = { stoppedAt: null, nCliff: 0, nRaw: 0, nKept: 0 };
       render();
       if (
