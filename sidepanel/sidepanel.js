@@ -8,11 +8,11 @@ function paint(list, label) {
   if (meta) {
     meta.textContent = n
       ? `${n} in queue${label ? " · " + label : ""}`
-      : "No cuts match — widen search or refresh the book.";
+      : "No cuts match — widen search or refresh the catalog.";
   }
 
   if (!n) {
-    ul.innerHTML = `<li class="empty">Nothing in the cut queue for this filter. Search the book or open sold tape from a title.</li>`;
+    ul.innerHTML = `<li class="empty">Nothing in the cut queue. Type for instant tape, or open solds from a title. Fast-Cash stays sold tape only.</li>`;
     return;
   }
 

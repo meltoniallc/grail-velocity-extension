@@ -10,6 +10,12 @@ body.panel ul { max-height: none; }
   color: var(--fg);
 }
 .status.muted { color: var(--muted); }
+.hint {
+  margin: 8px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--subtle);
+}
 .toolbar {
   padding: 0 16px 8px;
 }

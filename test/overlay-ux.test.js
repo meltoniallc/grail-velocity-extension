@@ -176,6 +176,33 @@ test("captureStatus is watching, scraped, or cliffed", () => {
   assert.equal(GV.captureStatus({ scraping: true, nCliff: 2 }), "watching");
 });
 
+test("desk empty states align watching / NO TAPE / cliff copy", () => {
+  assert.equal(GV.deskStatusLine("watching"), "watching solds…");
+  assert.equal(GV.deskStatusLine("cliffed"), "cliff — junk parked in scratch");
+  assert.equal(GV.deskStatusLine("scraped"), "scraped");
+  assert.equal(GV.deskStatusLine({ scraping: true }), "watching solds…");
+  assert.equal(GV.deskStatusLine({ nCliff: 2 }), "cliff — junk parked in scratch");
+  assert.equal(GV.deskNoTapeLine(), "NO TAPE — open solds or wait for auto-capture");
+  assert.equal(GV.DESK_EMPTY.watching, "watching solds…");
+  assert.equal(GV.DESK_EMPTY.noTape, "NO TAPE — open solds or wait for auto-capture");
+  assert.equal(GV.DESK_EMPTY.cliff, "cliff — junk parked in scratch");
+});
+
+test("formatTapeSync surfaces OK / fail / idle for Options and overlay", () => {
+  const now = 1_000_000;
+  const idle = GV.formatTapeSync(null, now);
+  assert.equal(idle.kind, "idle");
+  assert.equal(idle.label, "sync —");
+  assert.match(idle.detail, /No Tape API push/);
+  const ok = GV.formatTapeSync({ ok: true, at: now - 30_000 }, now);
+  assert.equal(ok.kind, "ok");
+  assert.match(ok.label, /sync OK/);
+  const bad = GV.formatTapeSync({ ok: false, error: "ECONNREFUSED", at: now - 120_000 }, now);
+  assert.equal(bad.kind, "bad");
+  assert.match(bad.label, /sync fail/);
+  assert.match(bad.detail, /ECONNREFUSED/);
+});
+
 test("autoCapture defaults ON; pref off ⇒ no scheduled auto-read", () => {
   assert.equal(GV.autoCaptureEnabled(undefined), true);
   assert.equal(GV.autoCaptureEnabled(null), true);
@@ -233,12 +260,20 @@ test("content script and side panel call extracted overlay helpers", () => {
   assert.match(ebay, /GV\.preserveKeepToggles\(/);
   assert.match(ebay, /GV\.lastReadPayload\(/);
   assert.match(ebay, /GV\.captureStatus\(/);
+  assert.match(ebay, /GV\.deskStatusLine\(/);
+  assert.match(ebay, /GV\.deskNoTapeLine\(/);
+  assert.match(ebay, /GV\.formatTapeSync\(/);
   assert.match(ebay, /data-capture-status/);
+  assert.match(ebay, /data-tape-sync/);
+  assert.match(ebay, /data-role="tape"/);
+  assert.match(ebay, /data-role="ask"/);
+  assert.match(ebay, /data-role="book"/);
   assert.match(ebay, /mode:\s*"manual"/);
   assert.match(ebay, /mode:\s*"auto"/);
   assert.match(ebay, /GV\.shouldScheduleAutoRead\(autoCapture\)/);
   assert.match(ebay, /GV\.autoCaptureEnabled\(/);
   assert.match(ebay, /chrome\.storage\.onChanged/);
+  assert.match(ebay, /changes\.tapeSync/);
   assert.match(ebay, /function scheduleRead\(\) \{\s*\n\s*if \(!GV\.shouldScheduleAutoRead\(autoCapture\)\) return;/);
   assert.match(optsHtml, /id="autoCapture"/);
   assert.match(optsJs, /autoCapture/);
@@ -248,11 +283,23 @@ test("content script and side panel call extracted overlay helpers", () => {
   assert.match(optsHtml, /id="scratchLocal"/);
   assert.match(optsHtml, /id="scratchRemote"/);
   assert.match(optsHtml, /id="scratchList"/);
+  assert.match(optsHtml, /id="syncStatus"/);
   assert.match(optsJs, /GV_SCRATCH_GET/);
   assert.match(optsJs, /GV_SCRATCH_REMOTE/);
   assert.match(optsJs, /GV\.scratchReasons\(/);
+  assert.match(optsJs, /GV\.formatTapeSync\(/);
+  assert.match(optsJs, /paintSync/);
   assert.match(panel, /GV\.formatLastRead\(/);
   assert.match(panel, /GV\.queueCopyText\(/);
+  const panelHtml = fs.readFileSync(path.join(__dirname, "../sidepanel/index.html"), "utf8");
+  assert.match(panelHtml, /Side panel · cut queue/);
+  assert.equal(/Side panel · book/.test(panelHtml), false);
+  assert.match(panelHtml, /Fast-Cash is sold tape only/);
+  const overlayCss = fs.readFileSync(path.join(__dirname, "../content/overlay.css"), "utf8");
+  assert.match(overlayCss, /\.gv-role-tape/);
+  assert.match(overlayCss, /\.gv-role-ask/);
+  assert.match(overlayCss, /\.gv-role-book/);
+  assert.match(overlayCss, /\.gv-sync/);
   assert.match(ebay, /GV\.listedAsk\(/);
   assert.match(ebay, /GV\.mergeKeepIntoSoldTape\(/);
   assert.match(ebay, /soldTape = \[\]/);

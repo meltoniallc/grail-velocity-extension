@@ -17,6 +17,10 @@
       #status { margin: 0; font-size: 12px; color: var(--muted); min-height: 1.2em; line-height: 1.45; }
       #status.ok { color: var(--ok); }
       #status.bad { color: var(--danger); }
+      #syncStatus { margin: 4px 0 0; }
+      #syncStatus.ok { color: var(--ok); }
+      #syncStatus.bad { color: var(--danger); }
+      #syncStatus.idle { color: var(--subtle); }
       code { font-family: ui-monospace, Menlo, monospace; font-size: 11px; }
       .scratch-list { list-style: none; margin: 8px 0 0; padding: 0; max-height: 220px; overflow: auto; display: grid; gap: 6px; }
       .scratch-list li { font-size: 12px; line-height: 1.4; color: var(--fg); padding: 6px 8px; background: var(--raised); border-radius: 4px; }
@@ -52,6 +56,7 @@
         <button type="button" class="secondary" id="check">Check connection</button>
         <button id="save" type="submit">Save</button>
       </div>
+      <p id="syncStatus" class="help sync" aria-live="polite">Last push: —</p>
       <label for="pullQuery">Pull / inspect query</label>
       <input id="pullQuery" type="text" placeholder="e.g. 2023-24 Topps Mercury … #5 Refractor 74/99" autocomplete="off" spellcheck="false" />
       <p class="help" style="margin-top:0">Cold Chrome / cleared storage: pull verified solds for one query from Postgres into local tape. Scratch and live asks stay out of Fast-Cash.</p>
