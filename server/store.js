@@ -40,6 +40,7 @@ function openScratch(filePath) {
     CREATE INDEX IF NOT EXISTS raw_listings_scraped_idx ON raw_listings(scraped_at);
   `);
   ensurePageScanMetaColumns(db);
+  ensureRawListingKindColumn(db);
   return db;
 }
 
@@ -51,6 +52,14 @@ function ensurePageScanMetaColumns(db) {
   }
   if (!cols.includes("page_mode")) {
     db.exec("ALTER TABLE page_scans ADD COLUMN page_mode TEXT");
+  }
+}
+
+/** Additive kind column so GET /scratch can label active asks vs drops. */
+function ensureRawListingKindColumn(db) {
+  const cols = db.prepare("PRAGMA table_info(raw_listings)").all().map((c) => c.name);
+  if (!cols.includes("kind")) {
+    db.exec("ALTER TABLE raw_listings ADD COLUMN kind TEXT");
   }
 }
 
@@ -80,6 +89,7 @@ function writeScratch(db, payload) {
   const now = Date.now();
   pruneScratch(db, now);
   ensurePageScanMetaColumns(db);
+  ensureRawListingKindColumn(db);
   const scratch = payload.scratch || {};
   const snap = payload.snapshot || {};
   const meta = captureMetaFromPayload(payload);
@@ -88,8 +98,8 @@ function writeScratch(db, payload) {
   const listings = scratch.listings || [];
   const insert = db.prepare(`
     INSERT INTO raw_listings
-      (query_norm, query_raw, title, price, match_score, flags, reason, keep, beyond_cliff, scraped_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
+      (query_norm, query_raw, title, price, match_score, flags, reason, keep, beyond_cliff, scraped_at, kind)
+    VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)
   `);
   const scan = db.prepare(
     `INSERT INTO page_scans
@@ -98,6 +108,7 @@ function writeScratch(db, payload) {
   );
   for (const row of listings) {
     const flags = Array.isArray(row.flags) ? row.flags : [];
+    const kind = row.kind || (row.keep ? "active" : "dropped");
     insert.run(
       queryNorm,
       queryRaw,
@@ -108,6 +119,7 @@ function writeScratch(db, payload) {
       row.reason || "",
       flags.includes("beyond_cliff") ? 1 : 0,
       now,
+      kind,
     );
   }
   scan.run(
@@ -262,6 +274,102 @@ function parseCompsJson(raw) {
 }
 
 /**
+ * Classify one scratch listing into an operator bucket.
+ * cliff / weak_title / active — never durable Fast-Cash.
+ */
+function scratchBucket(row) {
+  const flagsRaw = row && row.flags;
+  const flags = Array.isArray(flagsRaw)
+    ? flagsRaw
+    : String(flagsRaw || "")
+        .split(",")
+        .map((f) => f.trim())
+        .filter(Boolean);
+  const kind = row && row.kind;
+  if (kind === "active" || (row && row.keep && !flags.includes("beyond_cliff"))) {
+    return "active";
+  }
+  if (flags.includes("beyond_cliff") || row?.beyond_cliff === 1 || row?.beyondCliff) {
+    return "cliff";
+  }
+  if (flags.includes("weak_title")) return "weak_title";
+  return flags[0] || (row && row.reason) || "dropped";
+}
+
+/**
+ * Read last N scratch rows for one query_norm from SQLite (debug / inspect).
+ * Prunes expired rows first; TTL stays SCRATCH_TTL_MS (7d). Never touches Postgres.
+ */
+function getScratchSqlite(db, q, limit = 40) {
+  pruneScratch(db);
+  const norm = tapeQueryNorm(q);
+  const lim = Number.isFinite(Number(limit))
+    ? Math.min(100, Math.max(1, Math.floor(Number(limit))))
+    : 40;
+  if (!norm) {
+    return { queryNorm: "", listings: [], scans: [], source: "sqlite" };
+  }
+  ensureRawListingKindColumn(db);
+  const listings = db
+    .prepare(
+      `SELECT id, query_norm, query_raw, title, price, match_score, flags, reason, keep,
+              beyond_cliff, scraped_at, kind
+         FROM raw_listings
+        WHERE query_norm = ?
+        ORDER BY scraped_at DESC, id DESC
+        LIMIT ?`,
+    )
+    .all(norm, lim)
+    .map((row) => {
+      const flags = String(row.flags || "")
+        .split(",")
+        .map((f) => f.trim())
+        .filter(Boolean);
+      const kind = row.kind || (row.keep ? "active" : "dropped");
+      const listing = {
+        id: row.id,
+        queryNorm: row.query_norm,
+        queryRaw: row.query_raw,
+        title: row.title,
+        price: row.price == null ? null : Number(row.price),
+        matchScore: row.match_score == null ? null : Number(row.match_score),
+        flags,
+        reason: row.reason || "",
+        keep: Boolean(row.keep),
+        beyondCliff: Boolean(row.beyond_cliff),
+        kind,
+        at: row.scraped_at,
+      };
+      listing.bucket = scratchBucket(listing);
+      return listing;
+    });
+  const scans = db
+    .prepare(
+      `SELECT id, query_norm, query_raw, url, n_raw, n_kept, n_cliff, stopped_at,
+              scraped_at, mode, page_mode
+         FROM page_scans
+        WHERE query_norm = ?
+        ORDER BY scraped_at DESC, id DESC
+        LIMIT ?`,
+    )
+    .all(norm, Math.min(20, lim))
+    .map((row) => ({
+      id: row.id,
+      queryNorm: row.query_norm,
+      queryRaw: row.query_raw,
+      url: row.url || "",
+      nRaw: row.n_raw,
+      nKept: row.n_kept,
+      nCliff: row.n_cliff,
+      stoppedAt: row.stopped_at,
+      at: row.scraped_at,
+      mode: row.mode || null,
+      pageMode: row.page_mode || null,
+    }));
+  return { queryNorm: norm, listings, scans, source: "sqlite" };
+}
+
+/**
  * Pull one query_norm from Postgres: tape_snapshots + verified_prices.
  * Never reads SQLite scratch — Fast-Cash hydrate stays verified-sold only.
  */
@@ -342,6 +450,9 @@ module.exports = {
   writePostgres,
   suggestPostgres,
   getTapePostgres,
+  getScratchSqlite,
+  scratchBucket,
+  ensureRawListingKindColumn,
   tapeQueryNorm,
   parseCompsJson,
   SCRATCH_TTL_MS,

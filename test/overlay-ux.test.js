@@ -186,6 +186,40 @@ test("autoCapture defaults ON; pref off ⇒ no scheduled auto-read", () => {
   assert.equal(GV.shouldScheduleAutoRead(false), false);
 });
 
+test("scratchReasons buckets cliff / weak_title / active ask", () => {
+  assert.equal(GV.scratchBucket({ flags: ["beyond_cliff"], reason: "Past eBay relevance cliff" }), "cliff");
+  assert.equal(GV.scratchBucket({ flags: ["weak_title"], reason: "weak_title" }), "weak_title");
+  assert.equal(GV.scratchBucket({ kind: "active", keep: true, flags: [] }), "active");
+  assert.equal(GV.scratchBucket({ flags: ["wrong_set"], reason: "wrong_set" }), "wrong_set");
+
+  const reasons = GV.scratchReasons(
+    {
+      entries: [
+        {
+          at: 200,
+          listings: [
+            { id: "a", title: "live ask", price: 150, kind: "active", keep: true, flags: [] },
+            { id: "b", title: "near miss", price: 40, flags: ["weak_title"], reason: "weak_title" },
+          ],
+        },
+        {
+          at: 100,
+          listings: [
+            { id: "c", title: "junk after cliff", price: 3, flags: ["beyond_cliff"], reason: "Past eBay relevance cliff" },
+          ],
+        },
+      ],
+    },
+    { limit: 10 },
+  );
+  assert.equal(reasons.length, 3);
+  assert.equal(reasons[0].bucket, "active");
+  assert.equal(reasons[1].bucket, "weak_title");
+  assert.equal(reasons[2].bucket, "cliff");
+  assert.match(reasons[0].label, /active:/);
+  assert.equal(GV.scratchReasons({ listings: [] }, { limit: 5 }).length, 0);
+});
+
 test("content script and side panel call extracted overlay helpers", () => {
   const ebay = fs.readFileSync(path.join(__dirname, "../content/ebay.js"), "utf8");
   const demo = fs.readFileSync(path.join(__dirname, "../test/overlay-demo.html"), "utf8");
@@ -211,6 +245,12 @@ test("content script and side panel call extracted overlay helpers", () => {
   assert.match(optsHtml, /id="pull"/);
   assert.match(optsHtml, /id="pullQuery"/);
   assert.match(optsJs, /GV_TAPE_PULL/);
+  assert.match(optsHtml, /id="scratchLocal"/);
+  assert.match(optsHtml, /id="scratchRemote"/);
+  assert.match(optsHtml, /id="scratchList"/);
+  assert.match(optsJs, /GV_SCRATCH_GET/);
+  assert.match(optsJs, /GV_SCRATCH_REMOTE/);
+  assert.match(optsJs, /GV\.scratchReasons\(/);
   assert.match(panel, /GV\.formatLastRead\(/);
   assert.match(panel, /GV\.queueCopyText\(/);
   assert.match(ebay, /GV\.listedAsk\(/);

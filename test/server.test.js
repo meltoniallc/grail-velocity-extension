@@ -195,6 +195,93 @@ test("GET /tape is auth-gated and returns empty without postgres (no scratch lea
   }
 });
 
+test("GET /scratch is auth-gated and returns SQLite reasons only (7d TTL)", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "gv-tape-scratch-get-"));
+  const sqlite = path.join(dir, "scratch.sqlite");
+  const child = spawn(process.execPath, [path.join(__dirname, "..", "server", "index.js")], {
+    env: {
+      ...process.env,
+      PORT: "0",
+      SQLITE_PATH: sqlite,
+      DATABASE_URL: "",
+      TAPE_SECRET: "test-secret",
+      TAPE_SECRET_FILE: path.join(dir, "tape.secret"),
+    },
+    stdio: ["ignore", "ignore", "pipe"],
+  });
+  try {
+    const port = await waitPort(child);
+    const base = `http://127.0.0.1:${port}`;
+    const query = "2023-24 Topps Mercury Victor Wembanyama #5 Refractor 74/99";
+    await fetch(`${base}/tape`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Tape-Secret": "test-secret" },
+      body: JSON.stringify({
+        snapshot: {
+          query,
+          queryNorm: GV.fold(query),
+          comps: [],
+          nKept: 0,
+          nRaw: 2,
+          nCliff: 1,
+          fastCash: null,
+        },
+        scratch: {
+          query,
+          queryNorm: GV.fold(query),
+          listings: [
+            {
+              id: "junk",
+              title: "2023 Panini Prizm Victor Wembanyama #5 Silver",
+              price: 4.99,
+              flags: ["wrong_set"],
+              kind: "dropped",
+            },
+            {
+              id: "cliff",
+              title: "Bulk commons lot",
+              price: 1,
+              flags: ["beyond_cliff"],
+              kind: "dropped",
+              reason: "Past eBay relevance cliff",
+            },
+            {
+              id: "ask",
+              title: "2023-24 Topps Mercury Victor Wembanyama #5 Refractor 11/99",
+              price: 160,
+              kind: "active",
+              keep: true,
+              flags: [],
+            },
+          ],
+        },
+      }),
+    });
+    const denied = await fetch(`${base}/scratch?q=${encodeURIComponent(query)}`);
+    assert.equal(denied.status, 401);
+    const res = await fetch(`${base}/scratch?q=${encodeURIComponent(query)}&limit=10`, {
+      headers: { "X-Tape-Secret": "test-secret" },
+    });
+    assert.equal(res.status, 200);
+    const body = await res.json();
+    assert.equal(body.ok, true);
+    assert.equal(body.source, "sqlite");
+    assert.equal(body.ttlDays, 7);
+    assert.ok(body.listings.length >= 2);
+    assert.ok(body.listings.some((l) => l.bucket === "cliff"));
+    assert.ok(body.listings.some((l) => l.bucket === "active"));
+    assert.equal(
+      body.listings.some((l) => l.kind === "sold" && l.keep === true && l.bucket === "sold"),
+      false,
+    );
+    // Scratch endpoint must not invent durable Fast-Cash / postgres snapshot.
+    assert.equal(body.snapshot, undefined);
+    assert.equal(body.fastCash, undefined);
+  } finally {
+    child.kill();
+  }
+});
+
 test("tape server caps bodies, minimizes pre-auth health, and omits CORS", async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "gv-tape-hard-"));
   const sqlite = path.join(dir, "scratch.sqlite");
