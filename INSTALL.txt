@@ -1,4 +1,4 @@
-Grail Velocity v1.3.0 — Fast-Cash is sold tape only.
+Grail Velocity v2.0.0 — Fast-Cash is sold tape only.
 
 Build (from repo root):
   npm run package

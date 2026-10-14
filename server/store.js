@@ -168,10 +168,55 @@ function postgresSchema() {
   `;
 }
 
+/**
+ * Ordered additive Postgres migrations. Version 1 = base create-if-not-exists.
+ * Later versions must be additive only (ADD COLUMN IF NOT EXISTS, new indexes).
+ * Do not drop or rename columns here without a dedicated matching PR.
+ */
+const PG_MIGRATIONS = [
+  {
+    version: 1,
+    name: "base_verified_prices_and_tape_snapshots",
+    sql: postgresSchema(),
+  },
+];
+
+function schemaMigrationsDdl() {
+  return `
+    CREATE TABLE IF NOT EXISTS schema_migrations (
+      version INT PRIMARY KEY,
+      name TEXT NOT NULL,
+      applied_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `;
+}
+
+/**
+ * Apply pending additive migrations via schema_migrations version table.
+ * Idempotent: already-applied versions are skipped.
+ */
+async function ensurePostgresMigrations(pool) {
+  if (!pool) return { ok: false, skipped: "no-postgres", applied: [] };
+  await pool.query(schemaMigrationsDdl());
+  const { rows } = await pool.query("SELECT version FROM schema_migrations");
+  const have = new Set((rows || []).map((r) => Number(r.version)));
+  const applied = [];
+  for (const mig of PG_MIGRATIONS) {
+    if (have.has(mig.version)) continue;
+    await pool.query(mig.sql);
+    await pool.query(
+      "INSERT INTO schema_migrations (version, name) VALUES ($1, $2) ON CONFLICT (version) DO NOTHING",
+      [mig.version, mig.name],
+    );
+    applied.push(mig.version);
+  }
+  return { ok: true, applied, latest: PG_MIGRATIONS[PG_MIGRATIONS.length - 1]?.version || 0 };
+}
+
 async function writePostgres(pool, snapshot) {
   if (!pool || !snapshot) return { ok: false, skipped: "no-postgres" };
   const comps = snapshot.comps || [];
-  await pool.query(postgresSchema());
+  await ensurePostgresMigrations(pool);
   await pool.query(
     `INSERT INTO tape_snapshots
       (query_norm, query_raw, n_kept, n_raw, n_cliff, median, p25, p75, fast_cash, comps_json, updated_at)
@@ -377,7 +422,7 @@ async function getTapePostgres(pool, q) {
   if (!pool) return { snapshot: null, verifiedPrices: [], source: "none" };
   const norm = tapeQueryNorm(q);
   if (!norm) return { snapshot: null, verifiedPrices: [], source: "postgres" };
-  await pool.query(postgresSchema());
+  await ensurePostgresMigrations(pool);
   const snapRes = await pool.query(
     `SELECT query_norm, query_raw, n_kept, n_raw, n_cliff, median, p25, p75, fast_cash, comps_json, updated_at
        FROM tape_snapshots
@@ -447,6 +492,9 @@ module.exports = {
   ensurePageScanMetaColumns,
   captureMetaFromPayload,
   postgresSchema,
+  schemaMigrationsDdl,
+  PG_MIGRATIONS,
+  ensurePostgresMigrations,
   writePostgres,
   suggestPostgres,
   getTapePostgres,

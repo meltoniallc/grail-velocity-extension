@@ -143,3 +143,44 @@ test("mergeSuggestHits fills cold local from remote tape without inventing book 
   assert.equal(tape[0].fastCash, 55.5);
   assert.equal(tape[0].kind, "tape");
 });
+
+test("remote suggest fallback orchestration: rich local skips merge; thin local merges tape-only", () => {
+  /** Mirrors background suggestWithRemoteFallback without Chrome / fetch. */
+  function orchestrate(localHits, remoteHits, limit) {
+    if (!GV.localTapeThin(localHits)) return { hits: localHits, fetchedRemote: false };
+    if (!(remoteHits || []).length) return { hits: localHits, fetchedRemote: true };
+    return {
+      hits: GV.mergeSuggestHits(localHits, remoteHits, { limit }),
+      fetchedRemote: true,
+    };
+  }
+
+  const richLocal = GV.suggestTape("victor wembanyama", { tape: TAPE, catalog: CATALOG, limit: 8 });
+  assert.ok(GV.countTapeHits(richLocal) >= 2, "fixture should yield 2+ tape hits for Wemby");
+  assert.equal(GV.localTapeThin(richLocal), false);
+  const rich = orchestrate(richLocal, [{ kind: "tape", title: "should not need", query: "x" }], 8);
+  assert.equal(rich.fetchedRemote, false);
+  assert.equal(rich.hits, richLocal);
+
+  const coldLocal = GV.suggestTape("select wemby", { tape: [], catalog: CATALOG, limit: 8 });
+  assert.equal(GV.localTapeThin(coldLocal), true);
+  const cold = orchestrate(
+    coldLocal,
+    [
+      {
+        kind: "tape",
+        query: "2024-25 Select Victor Wembanyama #1",
+        title: "2024-25 Select Victor Wembanyama #1",
+        fastCash: 55.5,
+      },
+      { kind: "book", query: "nope", title: "nope", fastCash: 1 },
+    ],
+    8,
+  );
+  assert.equal(cold.fetchedRemote, true);
+  assert.ok(cold.hits.some((h) => h.kind === "tape" && /Select/i.test(h.title || "")));
+  assert.equal(
+    cold.hits.some((h) => /nope/i.test(h.title || "")),
+    false,
+  );
+});

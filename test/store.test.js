@@ -13,6 +13,10 @@ const {
   scratchBucket,
   tapeQueryNorm,
   SCRATCH_TTL_MS,
+  ensurePostgresMigrations,
+  PG_MIGRATIONS,
+  schemaMigrationsDdl,
+  writePostgres,
 } = require("../server/store");
 const { loadScripts } = require("./load-core");
 
@@ -171,9 +175,18 @@ test("getTapePostgres returns snapshot + verified_prices for one query_norm", as
   assert.equal(empty.snapshot, null);
 
   const calls = [];
+  const applied = new Set();
   const pool = {
     async query(sql, params) {
       calls.push({ sql: String(sql), params });
+      if (/CREATE TABLE IF NOT EXISTS schema_migrations/i.test(sql)) return { rows: [] };
+      if (/SELECT version FROM schema_migrations/i.test(sql)) {
+        return { rows: [...applied].map((version) => ({ version })) };
+      }
+      if (/INSERT INTO schema_migrations/i.test(sql)) {
+        applied.add(Number(params[0]));
+        return { rows: [] };
+      }
       if (/CREATE TABLE/i.test(sql)) return { rows: [] };
       if (/FROM tape_snapshots/i.test(sql)) {
         assert.equal(params[0], norm);
@@ -236,4 +249,87 @@ test("getTapePostgres returns snapshot + verified_prices for one query_norm", as
   assert.equal(pulled.verifiedPrices[0].price, 110);
   assert.ok(calls.some((c) => /FROM tape_snapshots/i.test(c.sql)));
   assert.ok(calls.some((c) => /FROM verified_prices/i.test(c.sql)));
+  assert.ok(applied.has(1), "pull path runs additive migrations first");
+});
+
+test("ensurePostgresMigrations applies v1 once and is idempotent", async () => {
+  assert.ok(PG_MIGRATIONS.length >= 1);
+  assert.equal(PG_MIGRATIONS[0].version, 1);
+  assert.match(schemaMigrationsDdl(), /schema_migrations/);
+
+  const applied = new Set();
+  const sqlLog = [];
+  const pool = {
+    async query(sql, params) {
+      sqlLog.push(String(sql));
+      if (/CREATE TABLE IF NOT EXISTS schema_migrations/i.test(sql)) return { rows: [] };
+      if (/SELECT version FROM schema_migrations/i.test(sql)) {
+        return { rows: [...applied].map((version) => ({ version })) };
+      }
+      if (/INSERT INTO schema_migrations/i.test(sql)) {
+        applied.add(Number(params[0]));
+        return { rows: [] };
+      }
+      if (/CREATE TABLE IF NOT EXISTS verified_prices/i.test(sql)) return { rows: [] };
+      return { rows: [] };
+    },
+  };
+
+  const first = await ensurePostgresMigrations(pool);
+  assert.equal(first.ok, true);
+  assert.deepEqual(first.applied, [1]);
+  assert.equal(first.latest, 1);
+
+  const second = await ensurePostgresMigrations(pool);
+  assert.equal(second.ok, true);
+  assert.deepEqual(second.applied, []);
+  assert.equal(applied.size, 1);
+
+  const inserts = sqlLog.filter((s) => /INSERT INTO schema_migrations/i.test(s));
+  assert.equal(inserts.length, 1);
+});
+
+test("writePostgres runs migrations before upserting verified solds", async () => {
+  const applied = new Set();
+  const statements = [];
+  const pool = {
+    async query(sql, params) {
+      statements.push({ sql: String(sql), params });
+      if (/CREATE TABLE IF NOT EXISTS schema_migrations/i.test(sql)) return { rows: [] };
+      if (/SELECT version FROM schema_migrations/i.test(sql)) {
+        return { rows: [...applied].map((version) => ({ version })) };
+      }
+      if (/INSERT INTO schema_migrations/i.test(sql)) {
+        applied.add(Number(params[0]));
+        return { rows: [] };
+      }
+      return { rows: [] };
+    },
+  };
+  const result = await writePostgres(pool, {
+    query: "q",
+    queryNorm: "q",
+    nKept: 1,
+    nRaw: 1,
+    nCliff: 0,
+    median: 100,
+    p25: 100,
+    p75: 100,
+    fastCash: 98,
+    comps: [
+      {
+        id: "1",
+        title: "sold",
+        price: 100,
+        matchScore: 0.9,
+        soldDate: "Sold Mar 1, 2026",
+        kind: "sold",
+      },
+    ],
+  });
+  assert.equal(result.ok, true);
+  assert.ok(applied.has(1));
+  const migIdx = statements.findIndex((s) => /INSERT INTO schema_migrations/i.test(s.sql));
+  const snapIdx = statements.findIndex((s) => /INSERT INTO tape_snapshots/i.test(s.sql));
+  assert.ok(migIdx >= 0 && snapIdx > migIdx, "migrations before tape_snapshots write");
 });
