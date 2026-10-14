@@ -4,7 +4,7 @@ Chromium MV3 overlay. Reads eBay sold tape as you. Fast-Cash is **sold tape only
 
 ## Status
 
-**v1.2.4**
+**v1.3.0**
 
 - Fast-Cash chip says **TAPE** or **NO TAPE**. Catalog book price is labeled Book ref and cannot be Applied.
 - Scrape any eBay tab. Live BIN/asks never write Fast-Cash.

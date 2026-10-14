@@ -1,9 +1,14 @@
 {
   "manifest_version": 3,
   "name": "Grail Velocity",
-  "version": "1.2.4",
-  "description": "Meltonia operator desk on eBay. Fast-Cash is sold tape only — never the book.",
-  "permissions": ["storage", "tabs", "sidePanel", "scripting"],
+  "version": "1.3.0",
+  "description": "Meltonia operator desk on eBay. Fast-Cash is sold tape only \u2014 never the book.",
+  "permissions": [
+    "storage",
+    "tabs",
+    "sidePanel",
+    "scripting"
+  ],
   "host_permissions": [
     "https://*.ebay.com/*",
     "http://127.0.0.1/*",
@@ -30,15 +35,28 @@
   },
   "content_scripts": [
     {
-      "matches": ["https://*.ebay.com/*"],
-      "js": ["lib/core.js", "lib/overlay.js", "lib/suggest.js", "content/ebay.js"],
+      "matches": [
+        "https://*.ebay.com/*"
+      ],
+      "js": [
+        "lib/core.js",
+        "lib/overlay.js",
+        "lib/suggest.js",
+        "content/ebay.js"
+      ],
       "run_at": "document_idle"
     }
   ],
   "web_accessible_resources": [
     {
-      "resources": ["content/overlay.css", "catalog.json", "icons/*"],
-      "matches": ["https://*.ebay.com/*"]
+      "resources": [
+        "content/overlay.css",
+        "catalog.json",
+        "icons/*"
+      ],
+      "matches": [
+        "https://*.ebay.com/*"
+      ]
     }
   ],
   "icons": {
