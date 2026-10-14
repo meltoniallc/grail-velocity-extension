@@ -54,6 +54,40 @@ async function catalog() {
   return cached.catalog || [];
 }
 
+async function tapeEndpoint() {
+  const settings = await chrome.storage.local.get(["tapeApi", "tapeSecret"]);
+  const endpoint = String(settings.tapeApi || "").replace(/\/+$/, "");
+  if (!endpoint) return null;
+  const headers = {};
+  if (settings.tapeSecret) headers["X-Tape-Secret"] = String(settings.tapeSecret);
+  return { endpoint, headers };
+}
+
+/** Optional GET /suggest when local Chrome tape is miss/thin. Tape hits only; never opens sold tabs. */
+async function fetchRemoteSuggest(q, limit) {
+  const cfg = await tapeEndpoint();
+  if (!cfg) return [];
+  try {
+    const url = `${cfg.endpoint}/suggest?q=${encodeURIComponent(q)}&limit=${encodeURIComponent(String(limit))}`;
+    const res = await fetch(url, { headers: cfg.headers });
+    if (!res.ok) return [];
+    const body = await res.json().catch(() => ({}));
+    const hits = Array.isArray(body.hits) ? body.hits : [];
+    return hits.filter((h) => h && h.kind === "tape");
+  } catch {
+    return [];
+  }
+}
+
+async function suggestWithRemoteFallback(q, limit) {
+  const needle = String(q || "").trim();
+  const localHits = await store().suggest(needle, { catalog: await catalog(), limit });
+  if (!needle || !globalThis.GV.localTapeThin(localHits)) return localHits;
+  const remoteHits = await fetchRemoteSuggest(needle, limit);
+  if (!remoteHits.length) return localHits;
+  return globalThis.GV.mergeSuggestHits(localHits, remoteHits, { limit });
+}
+
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg?.type === "GV_OPEN_SIDEPANEL" && sender.tab?.id != null) {
     (async () => {
@@ -73,7 +107,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
   if (msg?.type === "GV_SUGGEST") {
     (async () => {
-      const hits = await store().suggest(msg.q || "", { catalog: await catalog(), limit: 8 });
+      const hits = await suggestWithRemoteFallback(msg.q || "", 8);
       sendResponse({ hits });
     })();
     return true;

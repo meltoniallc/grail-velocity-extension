@@ -229,10 +229,12 @@ async function suggestPostgres(pool, q, limit) {
   );
   return rows.map((row) => ({
     kind: "tape",
+    score: 0.25,
     query: row.query_raw,
     title: row.query_raw,
     fastCash: row.fast_cash == null ? null : Number(row.fast_cash),
     nKept: row.n_kept,
+    at: row.updated_at ? new Date(row.updated_at).getTime() : undefined,
   }));
 }
 
