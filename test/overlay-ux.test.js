@@ -214,6 +214,16 @@ test("content script and side panel call extracted overlay helpers", () => {
   assert.match(ebay, /GV\.mergeKeepIntoSoldTape\(/);
   assert.match(ebay, /soldTape = \[\]/);
   assert.match(ebay, /readGen/);
+  assert.match(ebay, /data-act="continue-solds"/);
+  assert.match(ebay, /GV\.shouldContinueSoldPages\(/);
+  assert.match(ebay, /GV\.nextSoldPageUrl\(/);
+  assert.match(ebay, /followNextSoldPage/);
+  assert.match(ebay, /Typeahead never opens sold tabs/);
+  {
+    const hitBlock = ebay.match(/if \(act === "hit"\) \{[\s\S]*?\n    \}/);
+    assert.ok(hitBlock, "hit handler present");
+    assert.equal(/soldUrl|tabs\.create|location\.href/.test(hitBlock[0]), false);
+  }
   assert.deepEqual(manifest.content_scripts[0].js, ["lib/core.js", "lib/overlay.js", "content/ebay.js"]);
   assert.match(demo, /lib\/overlay\.js/);
 });
