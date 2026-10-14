@@ -21,6 +21,7 @@
   let typeGen = 0;
   let statusMsg = "";
   let settings = { ...GV.DEFAULT_FEES };
+  let autoCapture = true;
   let lastSig = "";
   let observeTimer = null;
   let statusTimer = null;
@@ -50,11 +51,12 @@
 
   async function loadPrefs() {
     try {
-      const stored = await chrome.storage.local.get(["fees", "overlayOpen"]);
+      const stored = await chrome.storage.local.get(["fees", "overlayOpen", "autoCapture"]);
       if (stored.fees && typeof stored.fees === "object") {
         settings = { ...GV.DEFAULT_FEES, ...stored.fees };
       }
       if (typeof stored.overlayOpen === "boolean") open = stored.overlayOpen;
+      autoCapture = GV.autoCaptureEnabled(stored.autoCapture);
     } catch {
       /* ignore */
     }
@@ -618,8 +620,10 @@
   }
 
   function scheduleRead() {
+    if (!GV.shouldScheduleAutoRead(autoCapture)) return;
     if (observeTimer) clearTimeout(observeTimer);
     observeTimer = setTimeout(() => {
+      if (!GV.shouldScheduleAutoRead(autoCapture)) return;
       if (shouldWatchPage()) read({ force: false, mode: "auto" });
     }, 450);
   }
@@ -640,7 +644,10 @@
       lastSig = "";
       scanMeta = { stoppedAt: null, nCliff: 0, nRaw: 0, nKept: 0 };
       render();
-      if (GV.isSoldSearch() || GV.isSearchPage() || GV.isListingOrRevise()) {
+      if (
+        GV.shouldScheduleAutoRead(autoCapture) &&
+        (GV.isSoldSearch() || GV.isSearchPage() || GV.isListingOrRevise())
+      ) {
         read({ force: true, mode: "auto" });
       } else if (query) {
         loadSnapshot(query);
@@ -674,6 +681,14 @@
   );
 
   await Promise.all([loadCatalog(), loadPrefs()]);
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area !== "local" || !changes.autoCapture) return;
+    autoCapture = GV.autoCaptureEnabled(changes.autoCapture.newValue);
+    if (!GV.shouldScheduleAutoRead(autoCapture) && observeTimer) {
+      clearTimeout(observeTimer);
+      observeTimer = null;
+    }
+  });
   pageMode = GV.pageMode();
   query = GV.pageQuery();
   typeQuery = query;
@@ -684,7 +699,10 @@
     scheduleRead();
   });
   mo.observe(document.documentElement, { childList: true, subtree: true });
-  if (GV.isSoldSearch() || GV.isSearchPage() || GV.isListingOrRevise()) {
+  if (
+    GV.shouldScheduleAutoRead(autoCapture) &&
+    (GV.isSoldSearch() || GV.isSearchPage() || GV.isListingOrRevise())
+  ) {
     await read({ force: true, mode: "auto" });
   } else if (query) {
     await loadSnapshot(query);

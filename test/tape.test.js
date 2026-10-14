@@ -195,3 +195,72 @@ test("putScan defaults capture mode to auto and carries pageMode", async () => {
   assert.equal(snap.comps.length, 0);
   assert.equal(snap.fastCash, null);
 });
+
+test("putScan coalesces remote push when snapshot and scratch set are unchanged", async () => {
+  let pushes = 0;
+  const bag = { snapshots: [], scratch: [] };
+  const adapter = {
+    bag,
+    async load() {
+      return { snapshots: bag.snapshots, scratch: bag.scratch };
+    },
+    async saveSnapshots(snapshots) {
+      bag.snapshots = snapshots;
+    },
+    async saveScratch(scratch) {
+      bag.scratch = scratch;
+    },
+    async pushRemote() {
+      pushes += 1;
+      return { ok: true };
+    },
+  };
+  const store = Tape.create(adapter);
+  const query = "2023-24 Topps Mercury Victor Wembanyama #5 Refractor 74/99";
+  const verified = GV.verifyComps(query, [
+    {
+      id: "a",
+      title: "2023-24 Topps Mercury Victor Wembanyama #5 Refractor 11/99",
+      price: 120,
+      soldDate: "Sold Mar 1, 2026",
+    },
+    {
+      id: "b",
+      title: "2023-24 Topps Mercury Victor Wembanyama #5 Refractor 22/99",
+      price: 110,
+      soldDate: "Sold Mar 2, 2026",
+    },
+  ]);
+  await store.putScan({ query, verified, mode: "auto", pageMode: "sold" });
+  assert.equal(pushes, 1);
+  const snapsAfterFirst = bag.snapshots.length;
+  const scratchAfterFirst = bag.scratch.length;
+  await store.putScan({ query, verified, mode: "auto", pageMode: "sold" });
+  assert.equal(pushes, 1, "identical rescan must not re-POST /tape");
+  assert.equal(bag.snapshots.length, snapsAfterFirst);
+  assert.ok(bag.scratch.length >= scratchAfterFirst, "local scratch still appends");
+  await store.putScan({
+    query,
+    verified: GV.verifyComps(query, [
+      {
+        id: "c",
+        title: "2023-24 Topps Mercury Victor Wembanyama #5 Refractor 33/99",
+        price: 115,
+        soldDate: "Sold Mar 3, 2026",
+      },
+    ]),
+    mode: "auto",
+    pageMode: "sold",
+  });
+  assert.equal(pushes, 2, "new durable comp must push");
+  assert.equal(Tape.remotePushNeeded(null, null, { queryNorm: "x", comps: [{ id: "1", price: 1 }] }, { listings: [] }), true);
+  assert.equal(
+    Tape.remotePushNeeded(
+      { queryNorm: "x", comps: [{ id: "1", price: 1, kind: "sold", matchScore: 0.9 }], nCliff: 0 },
+      { queryNorm: "x", listings: [{ id: "d", price: 2, kind: "dropped", keep: false, flags: [] }], nCliff: 0, stoppedAt: null },
+      { queryNorm: "x", comps: [{ id: "1", price: 1, kind: "sold", matchScore: 0.9 }], nCliff: 0 },
+      { queryNorm: "x", listings: [{ id: "d", price: 2, kind: "dropped", keep: false, flags: [] }], nCliff: 0, stoppedAt: null },
+    ),
+    false,
+  );
+});

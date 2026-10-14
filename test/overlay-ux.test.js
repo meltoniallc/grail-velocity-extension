@@ -176,10 +176,22 @@ test("captureStatus is watching, scraped, or cliffed", () => {
   assert.equal(GV.captureStatus({ scraping: true, nCliff: 2 }), "watching");
 });
 
+test("autoCapture defaults ON; pref off ⇒ no scheduled auto-read", () => {
+  assert.equal(GV.autoCaptureEnabled(undefined), true);
+  assert.equal(GV.autoCaptureEnabled(null), true);
+  assert.equal(GV.autoCaptureEnabled(true), true);
+  assert.equal(GV.autoCaptureEnabled(false), false);
+  assert.equal(GV.shouldScheduleAutoRead(true), true);
+  assert.equal(GV.shouldScheduleAutoRead(undefined), true);
+  assert.equal(GV.shouldScheduleAutoRead(false), false);
+});
+
 test("content script and side panel call extracted overlay helpers", () => {
   const ebay = fs.readFileSync(path.join(__dirname, "../content/ebay.js"), "utf8");
   const demo = fs.readFileSync(path.join(__dirname, "../test/overlay-demo.html"), "utf8");
   const panel = fs.readFileSync(path.join(__dirname, "../sidepanel/sidepanel.js"), "utf8");
+  const optsHtml = fs.readFileSync(path.join(__dirname, "../options/index.html"), "utf8");
+  const optsJs = fs.readFileSync(path.join(__dirname, "../options/options.js"), "utf8");
   const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, "../manifest.json"), "utf8"));
   assert.match(ebay, /GV\.findingsText\(/);
   assert.match(ebay, /GV\.pageChanged\(/);
@@ -190,6 +202,12 @@ test("content script and side panel call extracted overlay helpers", () => {
   assert.match(ebay, /data-capture-status/);
   assert.match(ebay, /mode:\s*"manual"/);
   assert.match(ebay, /mode:\s*"auto"/);
+  assert.match(ebay, /GV\.shouldScheduleAutoRead\(autoCapture\)/);
+  assert.match(ebay, /GV\.autoCaptureEnabled\(/);
+  assert.match(ebay, /chrome\.storage\.onChanged/);
+  assert.match(ebay, /function scheduleRead\(\) \{\s*\n\s*if \(!GV\.shouldScheduleAutoRead\(autoCapture\)\) return;/);
+  assert.match(optsHtml, /id="autoCapture"/);
+  assert.match(optsJs, /autoCapture/);
   assert.match(panel, /GV\.formatLastRead\(/);
   assert.match(panel, /GV\.queueCopyText\(/);
   assert.match(ebay, /GV\.listedAsk\(/);
