@@ -50,3 +50,52 @@ test("sqlite scratch keeps rejected noise off the verified tape", () => {
       assert.ok(snap.comps.every((c) => c.price >= 100));
     });
 });
+
+test("page_scans persists capture meta including stopped_at", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "gv-scratch-meta-"));
+  const db = openScratch(path.join(dir, "scratch.sqlite"));
+  const query = "2023-24 Topps Mercury Victor Wembanyama #5 Refractor 74/99";
+  const mem = { snapshots: [], scratch: [] };
+  const adapter = {
+    async load() {
+      return mem;
+    },
+    async saveSnapshots(s) {
+      mem.snapshots = s;
+    },
+    async saveScratch(s) {
+      mem.scratch = s;
+    },
+  };
+  const verified = GV.verifyComps(query, [
+    { id: "a", title: "2023-24 Topps Mercury Victor Wembanyama #5 Refractor 11/99", price: 120 },
+    { id: "b", title: "2023-24 Topps Mercury Victor Wembanyama #5 Refractor 22/99", price: 110 },
+    { id: "c", title: "Wembanyama mystery grab bag", price: 1 },
+    { id: "d", title: "Random bulk commons lot", price: 2 },
+    { id: "e", title: "Another junk listing", price: 3 },
+    { id: "f", title: "Yet more noise", price: 4 },
+  ]);
+  const snap = await GVTape.create(adapter).putScan({
+    query,
+    verified,
+    mode: "auto",
+    pageMode: "sold",
+    stoppedAt: verified.stoppedAt,
+    nCliff: verified.nCliff,
+    url: "https://www.ebay.com/sch/i.html?LH_Sold=1&_nkw=test",
+  });
+  writeScratch(db, { snapshot: snap, scratch: mem.scratch[0] });
+  const scan = db
+    .prepare(
+      "SELECT mode, page_mode, stopped_at, n_cliff, n_kept FROM page_scans ORDER BY id DESC LIMIT 1",
+    )
+    .get();
+  assert.equal(scan.mode, "auto");
+  assert.equal(scan.page_mode, "sold");
+  assert.equal(scan.stopped_at, verified.stoppedAt);
+  assert.ok(scan.n_cliff >= 1);
+  assert.ok(scan.n_kept >= 1);
+  assert.equal(mem.scratch[0].mode, "auto");
+  assert.equal(mem.scratch[0].pageMode, "sold");
+  assert.equal(mem.scratch[0].stoppedAt, verified.stoppedAt);
+});

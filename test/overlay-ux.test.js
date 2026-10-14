@@ -167,6 +167,15 @@ test("queueCopyText ranks by list-to-tape gap and caps at 40", () => {
   assert.match(lines[2], /^low\t/);
 });
 
+test("captureStatus is watching, scraped, or cliffed", () => {
+  assert.equal(GV.captureStatus({ scraping: true }), "watching");
+  assert.equal(GV.captureStatus({}), "watching");
+  assert.equal(GV.captureStatus({ nRaw: 0, pageRows: [], soldTape: [] }), "watching");
+  assert.equal(GV.captureStatus({ nRaw: 3, nCliff: 0, pageRows: [{ id: "a" }] }), "scraped");
+  assert.equal(GV.captureStatus({ nRaw: 5, nCliff: 2 }), "cliffed");
+  assert.equal(GV.captureStatus({ scraping: true, nCliff: 2 }), "watching");
+});
+
 test("content script and side panel call extracted overlay helpers", () => {
   const ebay = fs.readFileSync(path.join(__dirname, "../content/ebay.js"), "utf8");
   const demo = fs.readFileSync(path.join(__dirname, "../test/overlay-demo.html"), "utf8");
@@ -177,6 +186,10 @@ test("content script and side panel call extracted overlay helpers", () => {
   assert.match(ebay, /GV\.isOverlayToggleHotkey\(/);
   assert.match(ebay, /GV\.preserveKeepToggles\(/);
   assert.match(ebay, /GV\.lastReadPayload\(/);
+  assert.match(ebay, /GV\.captureStatus\(/);
+  assert.match(ebay, /data-capture-status/);
+  assert.match(ebay, /mode:\s*"manual"/);
+  assert.match(ebay, /mode:\s*"auto"/);
   assert.match(panel, /GV\.formatLastRead\(/);
   assert.match(panel, /GV\.queueCopyText\(/);
   assert.match(ebay, /GV\.listedAsk\(/);
