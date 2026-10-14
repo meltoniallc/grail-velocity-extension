@@ -91,6 +91,42 @@ test("tape server parks noise in sqlite and does not require postgres", async ()
   }
 });
 
+test("GET /suggest is auth-gated and returns tape-only hits without postgres", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "gv-tape-suggest-"));
+  const sqlite = path.join(dir, "scratch.sqlite");
+  const child = spawn(process.execPath, [path.join(__dirname, "..", "server", "index.js")], {
+    env: {
+      ...process.env,
+      PORT: "0",
+      SQLITE_PATH: sqlite,
+      DATABASE_URL: "",
+      TAPE_SECRET: "test-secret",
+      TAPE_SECRET_FILE: path.join(dir, "tape.secret"),
+    },
+    stdio: ["ignore", "ignore", "pipe"],
+  });
+  try {
+    const port = await waitPort(child);
+    const base = `http://127.0.0.1:${port}`;
+    const denied = await fetch(`${base}/suggest?q=mercury`);
+    assert.equal(denied.status, 401);
+    const res = await fetch(`${base}/suggest?q=mercury&limit=4`, {
+      headers: { "X-Tape-Secret": "test-secret" },
+    });
+    assert.equal(res.status, 200);
+    const body = await res.json();
+    assert.equal(body.source, "none");
+    assert.deepEqual(body.hits, []);
+    assert.ok(Array.isArray(body.hits));
+    assert.equal(
+      body.hits.every((h) => h.kind === "tape"),
+      true,
+    );
+  } finally {
+    child.kill();
+  }
+});
+
 test("tape server caps bodies, minimizes pre-auth health, and omits CORS", async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "gv-tape-hard-"));
   const sqlite = path.join(dir, "scratch.sqlite");

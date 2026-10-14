@@ -89,8 +89,12 @@ const server = http.createServer(async (req, res) => {
       return;
     }
     if (req.method === "GET" && url.pathname === "/suggest") {
-      const hits = await suggestPostgres(pool, url.searchParams.get("q") || "", 8);
-      send(res, 200, { hits, source: pool ? "postgres" : "none" });
+      const rawLimit = Number(url.searchParams.get("limit") || 8);
+      const limit = Number.isFinite(rawLimit) ? Math.min(24, Math.max(1, Math.floor(rawLimit))) : 8;
+      const hits = await suggestPostgres(pool, url.searchParams.get("q") || "", limit);
+      // Tape snapshots only — never serve catalog/book as Fast-Cash.
+      const tapeHits = (hits || []).filter((h) => h && h.kind === "tape");
+      send(res, 200, { hits: tapeHits, source: pool ? "postgres" : "none" });
       return;
     }
     if (req.method === "POST" && url.pathname === "/tape") {
