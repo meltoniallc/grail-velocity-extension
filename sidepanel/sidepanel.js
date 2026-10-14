@@ -1,15 +1,6 @@
 const GV = globalThis.GV;
 let items = [];
 
-async function catalog() {
-  const cached = await chrome.storage.local.get("catalog");
-  if (cached.catalog) return cached.catalog;
-  const res = await fetch(chrome.runtime.getURL("catalog.json"));
-  const data = await res.json();
-  await chrome.storage.local.set({ catalog: data, catalogAt: Date.now() });
-  return data;
-}
-
 function paint(list, label) {
   const ul = document.getElementById("cuts");
   const meta = document.getElementById("meta");
@@ -74,24 +65,19 @@ async function onTyped() {
     paint(rank(items), "by gap");
     return;
   }
-  try {
-    const res = await chrome.runtime.sendMessage({ type: "GV_SUGGEST", q });
-    if (gen !== typeGen) return;
-    if (res?.hits?.length) {
-      paint(res.hits, "suggest");
-      return;
-    }
-  } catch {
-    /* book fallback */
-  }
+  const hits = await GV.suggestLocalFirst(q, { catalog: items, tape: [], limit: 8 });
   if (gen !== typeGen) return;
+  if (hits.length) {
+    paint(hits, "suggest");
+    return;
+  }
   const tok = GV.tokenize(q);
-  const hits = items
+  const bookHits = items
     .map((item) => ({ item, score: GV.overlapScore(tok, `${item.title} ${item.player || ""}`) }))
     .filter((x) => x.score > 0.18)
     .sort((a, b) => b.score - a.score)
     .map((x) => x.item);
-  paint(hits, "search");
+  paint(bookHits, "search");
 }
 
 document.getElementById("cuts").addEventListener("click", (e) => {
@@ -128,7 +114,7 @@ if (copyQueueBtn) {
 }
 
 async function initPanel() {
-  items = await catalog();
+  items = await GV.loadCatalog();
   paint(rank(items), "by gap");
   paintLastRead();
 }

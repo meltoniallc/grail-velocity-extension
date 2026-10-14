@@ -34,22 +34,7 @@
   }
 
   async function loadCatalog() {
-    try {
-      const cached = await chrome.storage.local.get(["catalog", "catalogAt"]);
-      if (cached.catalog && Date.now() - (cached.catalogAt || 0) < 1000 * 60 * 60 * 12) {
-        catalog = cached.catalog;
-        return;
-      }
-    } catch {
-      /* ignore */
-    }
-    try {
-      const res = await fetch(chrome.runtime.getURL("catalog.json"));
-      catalog = await res.json();
-      await chrome.storage.local.set({ catalog, catalogAt: Date.now() });
-    } catch {
-      catalog = [];
-    }
+    catalog = await GV.loadCatalog();
   }
 
   async function loadPrefs() {
@@ -353,14 +338,13 @@
       paintSuggests();
       return;
     }
-    try {
-      const res = await chrome.runtime.sendMessage({ type: "GV_SUGGEST", q: typeQuery });
-      if (gen !== typeGen) return;
-      suggests = res?.hits || [];
-    } catch {
-      if (gen !== typeGen) return;
-      suggests = GV.suggestTape(typeQuery, { catalog, tape: soldTape, limit: 8 });
-    }
+    const hits = await GV.suggestLocalFirst(typeQuery, {
+      catalog,
+      tape: soldTape,
+      limit: 8,
+    });
+    if (gen !== typeGen) return;
+    suggests = hits;
     paintSuggests();
   }
 
