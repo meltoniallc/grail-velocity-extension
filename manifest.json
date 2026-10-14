@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Grail Velocity",
-  "version": "1.3.0",
-  "description": "Meltonia operator desk on eBay. Fast-Cash is sold tape only \u2014 never the book.",
+  "version": "2.0.0",
+  "description": "Meltonia operator desk on eBay. Fast-Cash is sold tape only — never the book.",
   "permissions": [
     "storage",
     "tabs",

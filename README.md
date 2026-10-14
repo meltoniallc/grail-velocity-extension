@@ -4,9 +4,12 @@ Chromium MV3 overlay. Reads eBay sold tape as you. Fast-Cash is **sold tape only
 
 ## Status
 
-**v1.3.0**
+**v2.0.0**
 
 - Fast-Cash chip says **TAPE** or **NO TAPE**. Catalog book price is labeled Book ref and cannot be Applied.
+- Auto-capture (preference-gated) + capture meta; Continue solds pagination on sold search only.
+- Local-first typeahead; optional Tape API suggest fallback + Postgres pull/hydrate.
+- Scratch inspector (Options + `GET /scratch`); chrome.storage snapshot prune; Postgres `schema_migrations`.
 - Scrape any eBay tab. Live BIN/asks never write Fast-Cash.
 - High-match keep (72%+). Cliff after 3 consecutive misses.
 - Optional tape server (Postgres + SQLite). Extension works without it.

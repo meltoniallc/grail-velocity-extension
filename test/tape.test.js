@@ -391,3 +391,130 @@ test("hydrateFromRemote keeps local durable comps over remote duplicates", async
   assert.equal(pushed, 0, "hydrate must not pushRemote");
   assert.equal(adapter.bag.scratch.length, 0);
 });
+
+test("pruneSnapshots keeps fastCash and recent query_norms; drops oldest junk", () => {
+  assert.equal(Tape.MAX_SNAPSHOTS, 80);
+  const now = 1_700_000_000_000;
+  const snaps = [];
+  for (let i = 0; i < 10; i += 1) {
+    snaps.push({
+      queryNorm: `old-${i}`,
+      query: `old ${i}`,
+      comps: [],
+      fastCash: null,
+      at: now - (10 - i) * 1000,
+    });
+  }
+  snaps.push({
+    queryNorm: "cash-keep",
+    query: "has fast cash",
+    comps: [{ id: "1", kind: "sold", price: 100 }],
+    fastCash: 98,
+    at: now - 50_000,
+  });
+  snaps.push({
+    queryNorm: "writing-now",
+    query: "active write",
+    comps: [],
+    fastCash: null,
+    at: now,
+  });
+  const pruned = Tape.pruneSnapshots(snaps, { max: 5, keepNorm: "writing-now" });
+  assert.equal(pruned.length, 5);
+  assert.ok(pruned.some((s) => s.queryNorm === "cash-keep"), "fastCash snapshot must survive");
+  assert.ok(pruned.some((s) => s.queryNorm === "writing-now"), "keepNorm must survive");
+  assert.ok(
+    !pruned.some((s) => s.queryNorm === "old-0"),
+    "oldest empty junk without cash is first to go",
+  );
+});
+
+test("putScan prunes tapeSnapshots toward MAX_SNAPSHOTS while keeping Fast-Cash", async () => {
+  const adapter = memoryAdapter();
+  const store = Tape.create(adapter);
+  const orig = Tape.MAX_SNAPSHOTS;
+  const query = "2023-24 Topps Mercury Victor Wembanyama #5 Refractor 74/99";
+  const verified = GV.verifyComps(query, [
+    {
+      id: "a",
+      title: "2023-24 Topps Mercury Victor Wembanyama #5 Refractor 11/99",
+      price: 120,
+      soldDate: "Sold Mar 1, 2026",
+    },
+    {
+      id: "b",
+      title: "2023-24 Topps Mercury Victor Wembanyama #5 Refractor 22/99",
+      price: 110,
+      soldDate: "Sold Mar 2, 2026",
+    },
+  ]);
+  const many = [];
+  for (let i = 0; i < orig + 5; i += 1) {
+    many.push({
+      queryNorm: `fill-${i}`,
+      query: `fill ${i}`,
+      comps: [],
+      nKept: 0,
+      fastCash: i === 2 ? 40 : null,
+      at: i,
+    });
+  }
+  adapter.bag.snapshots = many;
+  await store.putScan({ query, verified, mode: "manual", pageMode: "sold" });
+  assert.ok(adapter.bag.snapshots.length <= orig);
+  assert.ok(
+    adapter.bag.snapshots.some((s) => s.queryNorm === GV.fold(query)),
+    "written query survives prune",
+  );
+  assert.ok(
+    adapter.bag.snapshots.some((s) => s.queryNorm === "fill-2" && s.fastCash === 40),
+    "prior Fast-Cash snapshot survives prune",
+  );
+  assert.equal(adapter.bag.scratch[0].mode, "manual");
+});
+
+test("putScan distinguishes auto vs manual capture meta on durable and scratch", async () => {
+  const adapter = memoryAdapter();
+  const store = Tape.create(adapter);
+  const query = "2023-24 Topps Mercury Victor Wembanyama #5 Refractor 74/99";
+  const verified = GV.verifyComps(query, [
+    {
+      id: "a",
+      title: "2023-24 Topps Mercury Victor Wembanyama #5 Refractor 11/99",
+      price: 120,
+      soldDate: "Sold Mar 1, 2026",
+    },
+    {
+      id: "b",
+      title: "2023-24 Topps Mercury Victor Wembanyama #5 Refractor 22/99",
+      price: 110,
+      soldDate: "Sold Mar 2, 2026",
+    },
+  ]);
+  await store.putScan({
+    query,
+    verified,
+    mode: "manual",
+    pageMode: "sold",
+    stoppedAt: 3,
+    nCliff: 1,
+  });
+  const snap = await store.getSnapshot(query);
+  assert.equal(snap.mode, "manual");
+  assert.equal(snap.pageMode, "sold");
+  assert.equal(snap.stoppedAt, 3);
+  assert.equal(adapter.bag.scratch[0].mode, "manual");
+  assert.equal(adapter.bag.scratch[0].pageMode, "sold");
+
+  await store.putScan({
+    query: query + " auto",
+    verified,
+    mode: "auto",
+    pageMode: "search",
+  });
+  const autoSnap = await store.getSnapshot(query + " auto");
+  assert.equal(autoSnap.mode, "auto");
+  assert.equal(autoSnap.pageMode, "search");
+  const autoScratch = adapter.bag.scratch.find((s) => s.queryNorm === GV.fold(query + " auto"));
+  assert.equal(autoScratch.mode, "auto");
+});
