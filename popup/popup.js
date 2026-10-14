@@ -1,15 +1,6 @@
 const GV = globalThis.GV;
 let items = [];
 
-async function catalog() {
-  const cached = await chrome.storage.local.get("catalog");
-  if (cached.catalog) return cached.catalog;
-  const res = await fetch(chrome.runtime.getURL("catalog.json"));
-  const data = await res.json();
-  await chrome.storage.local.set({ catalog: data, catalogAt: Date.now() });
-  return data;
-}
-
 function money(n) {
   return GV.money(n);
 }
@@ -88,14 +79,9 @@ async function onTyped() {
     renderCuts(items);
     return;
   }
-  try {
-    const res = await chrome.runtime.sendMessage({ type: "GV_SUGGEST", q });
-    if (gen !== typeGen) return;
-    paintSuggest(res?.hits || []);
-  } catch {
-    if (gen !== typeGen) return;
-    paintSuggest(GV.suggestTape(q, { catalog: items, tape: [], limit: 8 }));
-  }
+  const hits = await GV.suggestLocalFirst(q, { catalog: items, tape: [], limit: 8 });
+  if (gen !== typeGen) return;
+  paintSuggest(hits);
 }
 
 document.getElementById("search").addEventListener("submit", (e) => {
@@ -137,7 +123,7 @@ document.getElementById("panel").addEventListener("click", async () => {
 });
 
 async function initPopup() {
-  items = await catalog();
+  items = await GV.loadCatalog();
   renderCuts(items);
 }
 

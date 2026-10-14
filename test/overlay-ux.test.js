@@ -267,6 +267,13 @@ test("content script and side panel call extracted overlay helpers", () => {
     assert.ok(hitBlock, "hit handler present");
     assert.equal(/soldUrl|tabs\.create|location\.href/.test(hitBlock[0]), false);
   }
-  assert.deepEqual(manifest.content_scripts[0].js, ["lib/core.js", "lib/overlay.js", "content/ebay.js"]);
+  assert.deepEqual(manifest.content_scripts[0].js, [
+    "lib/core.js",
+    "lib/overlay.js",
+    "lib/suggest.js",
+    "content/ebay.js",
+  ]);
   assert.match(demo, /lib\/overlay\.js/);
+  assert.match(ebay, /GV\.loadCatalog\(/);
+  assert.match(ebay, /GV\.suggestLocalFirst\(/);
 });
