@@ -27,6 +27,11 @@
     </header>
     <p class="help">The extension already keeps sold comps on this machine. The local tape server is optional: Postgres for verified prices, SQLite for junk. Run <code>npm run tape</code> in the grail-velocity folder. The terminal prints the secret and reuses it next time.</p>
     <form id="opts">
+      <label class="check" for="autoCapture" style="display:flex;align-items:flex-start;gap:10px;text-transform:none;letter-spacing:0;font-size:13px;color:var(--fg);line-height:1.4">
+        <input id="autoCapture" type="checkbox" checked style="width:auto;margin-top:2px" />
+        <span>Auto-capture on sold / search / listing</span>
+      </label>
+      <p class="help" style="margin-top:0">Default on (same as today). When off, MutationObserver and SPA location auto-reads stop; <strong>Scrape this page</strong> still works.</p>
       <label for="tapeApi">Tape API</label>
       <input id="tapeApi" type="url" placeholder="http://127.0.0.1:8787" autocomplete="off" />
       <label for="tapeSecret">Shared secret</label>

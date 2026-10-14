@@ -23,15 +23,17 @@ function npmCommand() {
 }
 
 async function load() {
-  const data = await chrome.storage.local.get(["tapeApi", "tapeSecret"]);
+  const data = await chrome.storage.local.get(["tapeApi", "tapeSecret", "autoCapture"]);
   document.getElementById("tapeApi").value = data.tapeApi || "http://127.0.0.1:8787";
   document.getElementById("tapeSecret").value = data.tapeSecret || "";
+  document.getElementById("autoCapture").checked = globalThis.GV.autoCaptureEnabled(data.autoCapture);
 }
 
 async function save() {
   const tapeApi = apiUrl();
   const tapeSecret = secretValue();
-  await chrome.storage.local.set({ tapeApi, tapeSecret });
+  const autoCapture = document.getElementById("autoCapture").checked;
+  await chrome.storage.local.set({ tapeApi, tapeSecret, autoCapture });
 }
 
 document.getElementById("opts").addEventListener("submit", async (e) => {
