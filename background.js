@@ -92,6 +92,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         verified: msg.verified,
         velocity: msg.velocity,
         url: msg.url,
+        mode: msg.mode,
+        pageMode: msg.pageMode,
+        stoppedAt: msg.stoppedAt,
+        nCliff: msg.nCliff,
       });
       sendResponse({ snapshot });
     })();

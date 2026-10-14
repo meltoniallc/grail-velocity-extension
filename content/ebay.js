@@ -179,6 +179,13 @@
     const avg =
       kept.length > 0 ? kept.reduce((sum, row) => sum + (row.matchScore || 0), 0) / kept.length : 0;
     const droppedCount = pageRows.length - kept.length;
+    const captureLine = GV.captureStatus({
+      scraping,
+      nCliff: scanMeta.nCliff,
+      nRaw: scanMeta.nRaw,
+      pageRows,
+      soldTape,
+    });
     wrap.innerHTML = `
       <div class="gv-head">
         <div>
@@ -207,6 +214,7 @@
             : ""
         }
         <p class="gv-q">${esc(query || "No query on this page")}</p>
+        <p class="gv-id" data-capture-status="${esc(captureLine)}">${esc(captureLine)}</p>
         ${
           sku
             ? `<div class="gv-sku">
@@ -422,7 +430,7 @@
       return;
     }
     if (act === "scrape") {
-      await read(true);
+      await read({ force: true, mode: "manual" });
       return;
     }
     if (act === "sold") {
@@ -519,7 +527,13 @@
     return listings;
   }
 
-  async function read(force = false) {
+  async function read(opts = false) {
+    const options =
+      opts && typeof opts === "object"
+        ? { force: Boolean(opts.force), mode: opts.mode === "manual" ? "manual" : "auto" }
+        : { force: Boolean(opts), mode: opts ? "manual" : "auto" };
+    const force = options.force;
+    const captureMode = options.mode;
     const gen = (readGen += 1);
     scraping = true;
     const prevQ = query;
@@ -540,6 +554,8 @@
         nCliff: result.nCliff,
         nRaw: result.nRaw,
         nKept: result.nKept,
+        mode: captureMode,
+        pageMode,
       };
       pageRows = GV.preserveKeepToggles(result.rows, prevKeep, query === prevQ);
       sku = GV.matchSku(catalog, query);
@@ -560,6 +576,10 @@
             verified: result,
             velocity,
             url: location.href,
+            mode: captureMode,
+            pageMode,
+            stoppedAt: result.stoppedAt,
+            nCliff: result.nCliff,
           });
           if (gen !== readGen) return;
           if (put?.snapshot) applySoldTape(put.snapshot);
@@ -600,7 +620,7 @@
   function scheduleRead() {
     if (observeTimer) clearTimeout(observeTimer);
     observeTimer = setTimeout(() => {
-      if (shouldWatchPage()) read(false);
+      if (shouldWatchPage()) read({ force: false, mode: "auto" });
     }, 450);
   }
 
@@ -621,7 +641,7 @@
       scanMeta = { stoppedAt: null, nCliff: 0, nRaw: 0, nKept: 0 };
       render();
       if (GV.isSoldSearch() || GV.isSearchPage() || GV.isListingOrRevise()) {
-        read(true);
+        read({ force: true, mode: "auto" });
       } else if (query) {
         loadSnapshot(query);
       }
@@ -631,12 +651,12 @@
   chrome.runtime.onMessage.addListener((msg, _s, send) => {
     if (msg?.type === "GV_TOGGLE") {
       setOpen(!open);
-      if (open) read(true);
+      if (open) read({ force: true, mode: "manual" });
       send({ open });
     }
     if (msg?.type === "GV_READ") {
       setOpen(true);
-      read(true);
+      read({ force: true, mode: "manual" });
       send({ query, n: pageRows.length, action: velocity?.action });
     }
     return true;
@@ -648,7 +668,7 @@
       if (!GV.isOverlayToggleHotkey(e)) return;
       e.preventDefault();
       setOpen(!open);
-      if (open) read(true);
+      if (open) read({ force: true, mode: "manual" });
     },
     true,
   );
@@ -665,7 +685,7 @@
   });
   mo.observe(document.documentElement, { childList: true, subtree: true });
   if (GV.isSoldSearch() || GV.isSearchPage() || GV.isListingOrRevise()) {
-    await read(true);
+    await read({ force: true, mode: "auto" });
   } else if (query) {
     await loadSnapshot(query);
   }

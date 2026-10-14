@@ -94,3 +94,104 @@ test("merges later sold pages without reintroducing cliff junk", async () => {
   assert.equal(snap.comps.length, 2);
   assert.ok(snap.comps.every((c) => c.price >= 110));
 });
+
+test("putScan contract: sold keeps durable; live asks and rejects go to scratch", async () => {
+  const adapter = memoryAdapter();
+  const store = Tape.create(adapter);
+  const query = "2023-24 Topps Mercury Victor Wembanyama #5 Refractor 74/99";
+  const verified = {
+    rows: [
+      {
+        id: "sold-keep",
+        title: "2023-24 Topps Mercury Victor Wembanyama #5 Refractor 11/99",
+        price: 120,
+        keep: true,
+        kind: "sold",
+        soldDate: "Sold Mar 1, 2026",
+        matchScore: 0.95,
+        flags: [],
+      },
+      {
+        id: "live-ask",
+        title: "2023-24 Topps Mercury Victor Wembanyama #5 Refractor 12/99",
+        price: 200,
+        keep: true,
+        kind: "active",
+        matchScore: 0.94,
+        flags: [],
+      },
+      {
+        id: "drop",
+        title: "Wembanyama lot of 10",
+        price: 8,
+        keep: false,
+        kind: "active",
+        matchScore: 0.2,
+        flags: ["beyond_cliff"],
+        reason: "cliff",
+      },
+    ],
+    nCliff: 1,
+    stoppedAt: 2,
+    nRaw: 3,
+    nKept: 2,
+  };
+  const split = Tape.splitScanRows(verified.rows);
+  assert.equal(split.keptSold.length, 1);
+  assert.equal(split.keptSold[0].id, "sold-keep");
+  assert.equal(split.parked.length, 2);
+  assert.ok(split.parked.every((r) => r.id !== "sold-keep"));
+
+  await store.putScan({
+    query,
+    verified,
+    mode: "manual",
+    pageMode: "sold",
+    stoppedAt: 2,
+    nCliff: 1,
+    url: "https://www.ebay.com/sch/i.html?LH_Sold=1",
+  });
+  const snap = await store.getSnapshot(query);
+  assert.equal(snap.comps.length, 1);
+  assert.equal(snap.comps[0].id, "sold-keep");
+  assert.equal(snap.mode, "manual");
+  assert.equal(snap.pageMode, "sold");
+  assert.equal(snap.stoppedAt, 2);
+  assert.equal(snap.nCliff, 1);
+
+  const scratch = adapter.bag.scratch[0];
+  assert.equal(scratch.mode, "manual");
+  assert.equal(scratch.pageMode, "sold");
+  assert.equal(scratch.stoppedAt, 2);
+  assert.equal(scratch.nCliff, 1);
+  assert.ok(scratch.listings.some((l) => l.id === "live-ask"));
+  assert.ok(scratch.listings.some((l) => l.id === "drop"));
+  assert.equal(
+    scratch.listings.some((l) => l.id === "sold-keep"),
+    false,
+  );
+});
+
+test("putScan defaults capture mode to auto and carries pageMode", async () => {
+  const adapter = memoryAdapter();
+  const store = Tape.create(adapter);
+  const query = "2023-24 Topps Mercury Victor Wembanyama #5 Refractor 74/99";
+  await store.putScan({
+    query,
+    pageMode: "live",
+    verified: GV.verifyComps(query, [
+      {
+        id: "a",
+        title: "2023-24 Topps Mercury Victor Wembanyama #5 Refractor 11/99",
+        price: 120,
+        kind: "active",
+      },
+    ]),
+  });
+  const scratch = adapter.bag.scratch[0];
+  assert.equal(scratch.mode, "auto");
+  assert.equal(scratch.pageMode, "live");
+  const snap = await store.getSnapshot(query);
+  assert.equal(snap.comps.length, 0);
+  assert.equal(snap.fastCash, null);
+});

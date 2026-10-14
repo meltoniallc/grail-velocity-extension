@@ -32,12 +32,26 @@ function openScratch(filePath) {
       n_kept INTEGER,
       n_cliff INTEGER,
       stopped_at INTEGER,
-      scraped_at INTEGER NOT NULL
+      scraped_at INTEGER NOT NULL,
+      mode TEXT,
+      page_mode TEXT
     );
     CREATE INDEX IF NOT EXISTS raw_listings_query_idx ON raw_listings(query_norm);
     CREATE INDEX IF NOT EXISTS raw_listings_scraped_idx ON raw_listings(scraped_at);
   `);
+  ensurePageScanMetaColumns(db);
   return db;
+}
+
+/** Additive columns for older scratch DBs created before capture-meta. */
+function ensurePageScanMetaColumns(db) {
+  const cols = db.prepare("PRAGMA table_info(page_scans)").all().map((c) => c.name);
+  if (!cols.includes("mode")) {
+    db.exec("ALTER TABLE page_scans ADD COLUMN mode TEXT");
+  }
+  if (!cols.includes("page_mode")) {
+    db.exec("ALTER TABLE page_scans ADD COLUMN page_mode TEXT");
+  }
 }
 
 function pruneScratch(db, now = Date.now()) {
@@ -46,11 +60,29 @@ function pruneScratch(db, now = Date.now()) {
   db.prepare("DELETE FROM page_scans WHERE scraped_at < ?").run(cutoff);
 }
 
+function captureMetaFromPayload(payload) {
+  const scratch = payload.scratch || {};
+  const snap = payload.snapshot || {};
+  const mode = scratch.mode || snap.mode || null;
+  const pageMode = scratch.pageMode || snap.pageMode || null;
+  const stoppedAt =
+    scratch.stoppedAt != null
+      ? scratch.stoppedAt
+      : snap.stoppedAt != null
+        ? snap.stoppedAt
+        : null;
+  const nCliff =
+    scratch.nCliff != null ? scratch.nCliff : snap.nCliff != null ? snap.nCliff : 0;
+  return { mode, pageMode, stoppedAt, nCliff };
+}
+
 function writeScratch(db, payload) {
   const now = Date.now();
   pruneScratch(db, now);
+  ensurePageScanMetaColumns(db);
   const scratch = payload.scratch || {};
   const snap = payload.snapshot || {};
+  const meta = captureMetaFromPayload(payload);
   const queryRaw = snap.query || scratch.query || "";
   const queryNorm = snap.queryNorm || scratch.queryNorm || queryRaw.toLowerCase();
   const listings = scratch.listings || [];
@@ -60,8 +92,9 @@ function writeScratch(db, payload) {
     VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
   `);
   const scan = db.prepare(
-    `INSERT INTO page_scans (query_norm, query_raw, url, n_raw, n_kept, n_cliff, stopped_at, scraped_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO page_scans
+      (query_norm, query_raw, url, n_raw, n_kept, n_cliff, stopped_at, scraped_at, mode, page_mode)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   );
   for (const row of listings) {
     const flags = Array.isArray(row.flags) ? row.flags : [];
@@ -83,9 +116,11 @@ function writeScratch(db, payload) {
     snap.url || scratch.url || "",
     snap.nRaw ?? listings.length,
     snap.nKept ?? 0,
-    snap.nCliff ?? 0,
-    null,
+    meta.nCliff ?? snap.nCliff ?? 0,
+    meta.stoppedAt,
     now,
+    meta.mode,
+    meta.pageMode,
   );
 }
 
@@ -205,6 +240,8 @@ module.exports = {
   openScratch,
   writeScratch,
   pruneScratch,
+  ensurePageScanMetaColumns,
+  captureMetaFromPayload,
   postgresSchema,
   writePostgres,
   suggestPostgres,
