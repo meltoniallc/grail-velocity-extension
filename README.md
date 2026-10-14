@@ -28,9 +28,9 @@ Chromium MV3 overlay. Reads eBay sold tape as you. Fast-Cash is **sold tape only
 | Field | Source |
 |---|---|
 | Fast-Cash **TAPE** | P25 × 0.98 of verified **sold** comps on/cached for this query |
-| Fast-Cash **NO TAPE** | No price. Open solds and scrape. |
-| Book ref | Stale catalog ask from `catalog.json`. Display only. |
-| Listed | Live ask on this page. Empty on sold search. Catalog BIN is Book ref only. |
+| Fast-Cash **NO TAPE** | No price. Desk says: open solds or wait for auto-capture. |
+| Book ref | Catalog ask from `catalog.json`. Display only — never Apply. |
+| Listed ask | Live BIN/ask on this page. Empty on sold search. Never sets Fast-Cash. |
 | kept / dropped | Title identity vs the search (set, #, print run, player) |
 
 Need 2 tight (85%+) or 3 verified solds. One cheap near-miss cannot pull the tape.

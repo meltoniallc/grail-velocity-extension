@@ -22,11 +22,23 @@ function npmCommand() {
   return globalThis.GV.npmTapeCommand(secretValue());
 }
 
+function paintSync(sync) {
+  const el = document.getElementById("syncStatus");
+  if (!el || !globalThis.GV?.formatTapeSync) return;
+  const info = globalThis.GV.formatTapeSync(sync);
+  el.textContent =
+    info.kind === "idle"
+      ? "Last push: — (sync status appears after a Tape API write)"
+      : `Last push: ${info.label}${info.kind === "bad" && info.detail ? " — " + info.detail : ""}`;
+  el.className = `help sync ${info.kind}`;
+}
+
 async function load() {
-  const data = await chrome.storage.local.get(["tapeApi", "tapeSecret", "autoCapture"]);
+  const data = await chrome.storage.local.get(["tapeApi", "tapeSecret", "autoCapture", "tapeSync"]);
   document.getElementById("tapeApi").value = data.tapeApi || "http://127.0.0.1:8787";
   document.getElementById("tapeSecret").value = data.tapeSecret || "";
   document.getElementById("autoCapture").checked = globalThis.GV.autoCaptureEnabled(data.autoCapture);
+  paintSync(data.tapeSync);
 }
 
 async function save() {
@@ -187,5 +199,9 @@ async function inspectScratch(remote) {
 
 document.getElementById("scratchLocal").addEventListener("click", () => inspectScratch(false));
 document.getElementById("scratchRemote").addEventListener("click", () => inspectScratch(true));
+
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === "local" && changes.tapeSync) paintSync(changes.tapeSync.newValue);
+});
 
 load();
