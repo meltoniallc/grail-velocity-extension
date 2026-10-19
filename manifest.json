@@ -11,7 +11,7 @@
   ],
   "host_permissions": [
     "https://*.ebay.com/*",
-    "https://*.up.railway.app/*",
+    "https://tape-production-2810.up.railway.app/*",
     "http://127.0.0.1/*",
     "http://localhost/*"
   ],

@@ -15,12 +15,25 @@ function timedFetch(url, init, ms) {
 }
 
 /** POST /tape off the capture path: queued, persisted, retried. */
-async function sendTapePush(payload) {
-  const settings = await local.get(["tapeApi", "tapeSecret"]);
+function tapeTarget(settings) {
   const endpoint = String(settings.tapeApi || "").replace(/\/+$/, "");
-  if (!endpoint) return { ok: true, skipped: "no-api" };
-  const headers = { "Content-Type": "application/json" };
-  if (settings.tapeSecret) headers["X-Tape-Secret"] = String(settings.tapeSecret);
+  if (!endpoint) return { endpoint: "", missing: true, allowed: false, headers: {} };
+  const allowed = globalThis.GV.tapeApiAllowed(endpoint);
+  const headers = {};
+  if (allowed && settings.tapeSecret) headers["X-Tape-Secret"] = String(settings.tapeSecret);
+  return { endpoint, missing: false, allowed, headers };
+}
+
+async function sendTapePush(payload) {
+  const target = tapeTarget(await local.get(["tapeApi", "tapeSecret"]));
+  if (target.missing) return { ok: true, skipped: "no-api" };
+  if (!target.allowed) {
+    const error = "Tape API host is not allowed.";
+    await local.set({ tapeSync: { ok: false, error, at: Date.now() } });
+    return { ok: false, error };
+  }
+  const endpoint = target.endpoint;
+  const headers = { "Content-Type": "application/json", ...target.headers };
   try {
     const res = await timedFetch(
       `${endpoint}/tape`,
@@ -94,12 +107,9 @@ async function catalog() {
 }
 
 async function tapeEndpoint() {
-  const settings = await local.get(["tapeApi", "tapeSecret"]);
-  const endpoint = String(settings.tapeApi || "").replace(/\/+$/, "");
-  if (!endpoint) return null;
-  const headers = {};
-  if (settings.tapeSecret) headers["X-Tape-Secret"] = String(settings.tapeSecret);
-  return { endpoint, headers };
+  const target = tapeTarget(await local.get(["tapeApi", "tapeSecret"]));
+  if (target.missing || !target.allowed) return null;
+  return { endpoint: target.endpoint, headers: target.headers };
 }
 
 /** Optional GET /suggest when local Chrome tape is miss/thin. Tape hits only; never opens sold tabs. */
@@ -301,12 +311,20 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
   if (msg?.type === "GV_TAPE_PING") {
     (async () => {
-      const settings = await local.get(["tapeApi", "tapeSecret"]);
-      const endpoint = String(settings.tapeApi || "").replace(/\/+$/, "");
-      if (!endpoint) {
+      const target = tapeTarget(await local.get(["tapeApi", "tapeSecret"]));
+      if (target.missing) {
         sendResponse({ ok: false, error: "Set Tape API first. Default is http://127.0.0.1:8787." });
         return;
       }
+      if (!target.allowed) {
+        sendResponse({
+          ok: false,
+          error:
+            "Tape API must be http://127.0.0.1:8787 or https://tape-production-2810.up.railway.app.",
+        });
+        return;
+      }
+      const endpoint = target.endpoint;
       try {
         const healthRes = await timedFetch(`${endpoint}/health`, {}, INSPECT_TIMEOUT_MS);
         const health = await healthRes.json().catch(() => ({}));
@@ -314,8 +332,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           sendResponse({ ok: false, error: "Tape API answered but is not healthy." });
           return;
         }
-        const headers = {};
-        if (settings.tapeSecret) headers["X-Tape-Secret"] = String(settings.tapeSecret);
+        const headers = target.headers;
         const pingRes = await timedFetch(`${endpoint}/ping`, { headers }, INSPECT_TIMEOUT_MS);
         if (pingRes.status === 401) {
           sendResponse({

@@ -1,5 +1,7 @@
 "use strict";
 
+const crypto = require("node:crypto");
+
 /**
  * Bind loopback for `npm run tape` on a desk. Railway injects
  * RAILWAY_ENVIRONMENT; the proxy can only reach 0.0.0.0.
@@ -40,4 +42,16 @@ function postgresPoolOptions(connectionString, extra = {}) {
   return options;
 }
 
-module.exports = { listenHost, postgresPoolOptions };
+/** Constant-time compare. Empty expected means "no secret configured" (allow). */
+function secretMatches(expected, headerValue) {
+  const want = Buffer.from(String(expected || ""));
+  if (want.length === 0) return true;
+  const given = Buffer.from(String(headerValue || ""));
+  if (given.length !== want.length) {
+    crypto.timingSafeEqual(want, Buffer.alloc(want.length));
+    return false;
+  }
+  return crypto.timingSafeEqual(given, want);
+}
+
+module.exports = { listenHost, postgresPoolOptions, secretMatches };
