@@ -11,6 +11,7 @@ const {
   getScratchSqlite,
 } = require("./store");
 const { resolveSecret } = require("./secret");
+const { listenHost, postgresPoolOptions } = require("./runtime");
 
 const PORT = Number(process.env.PORT || 8787);
 const SQLITE_PATH = process.env.SQLITE_PATH || path.join(__dirname, "..", "data", "scratch.sqlite");
@@ -25,7 +26,7 @@ const TAPE_SECRET = secretInfo.secret;
 let pool = null;
 if (DATABASE_URL) {
   const { Pool } = require("pg");
-  pool = new Pool({ connectionString: DATABASE_URL, max: 4 });
+  pool = new Pool(postgresPoolOptions(DATABASE_URL));
 }
 
 const scratch = openScratch(SQLITE_PATH);
@@ -147,13 +148,14 @@ const server = http.createServer(async (req, res) => {
 });
 
 if (require.main === module) {
-  server.listen(PORT, "127.0.0.1", () => {
+  const host = listenHost();
+  server.listen(PORT, host, () => {
     const addr = server.address();
     const port = typeof addr === "object" && addr ? addr.port : PORT;
     process.stderr.write(
-      `Grail Velocity tape on http://127.0.0.1:${port} (postgres ${pool ? "on" : "off"}, sqlite ${SQLITE_PATH})\nPaste this secret in Grail Velocity Options:\n${TAPE_SECRET}\n(source: ${secretInfo.source}, file: ${secretInfo.filePath})\nThen: Tape API http://127.0.0.1:${port} → Save → Check connection.\n`,
+      `Grail Velocity tape on http://${host}:${port} (postgres ${pool ? "on" : "off"}, sqlite ${SQLITE_PATH})\nPaste this secret in Grail Velocity Options:\n${TAPE_SECRET}\n(source: ${secretInfo.source}, file: ${secretInfo.filePath})\nThen: Tape API http://${host}:${port} → Save → Check connection.\n`,
     );
   });
 }
 
-module.exports = { server, scratch };
+module.exports = { server, scratch, listenHost, postgresPoolOptions };

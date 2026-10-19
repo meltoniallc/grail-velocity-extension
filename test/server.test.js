@@ -9,6 +9,20 @@ const { spawn } = require("node:child_process");
 const { loadScripts } = require("./load-core");
 
 const { GV } = loadScripts(["lib/core.js"]);
+const { listenHost, postgresPoolOptions } = require("../server/runtime");
+
+function tapeEnv(extra) {
+  return {
+    ...process.env,
+    PORT: "0",
+    DATABASE_URL: "",
+    TAPE_SECRET: "test-secret",
+    TAPE_HOST: "",
+    RAILWAY_ENVIRONMENT: "",
+    RAILWAY_PROJECT_ID: "",
+    ...extra,
+  };
+}
 
 function waitPort(child) {
   return new Promise((resolve, reject) => {
@@ -31,14 +45,10 @@ test("tape server parks noise in sqlite and does not require postgres", async ()
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "gv-tape-http-"));
   const sqlite = path.join(dir, "scratch.sqlite");
   const child = spawn(process.execPath, [path.join(__dirname, "..", "server", "index.js")], {
-    env: {
-      ...process.env,
-      PORT: "0",
+    env: tapeEnv({
       SQLITE_PATH: sqlite,
-      DATABASE_URL: "",
-      TAPE_SECRET: "test-secret",
       TAPE_SECRET_FILE: path.join(dir, "tape.secret"),
-    },
+    }),
     stdio: ["ignore", "ignore", "pipe"],
   });
   try {
@@ -95,14 +105,10 @@ test("GET /suggest is auth-gated and returns tape-only hits without postgres", a
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "gv-tape-suggest-"));
   const sqlite = path.join(dir, "scratch.sqlite");
   const child = spawn(process.execPath, [path.join(__dirname, "..", "server", "index.js")], {
-    env: {
-      ...process.env,
-      PORT: "0",
+    env: tapeEnv({
       SQLITE_PATH: sqlite,
-      DATABASE_URL: "",
-      TAPE_SECRET: "test-secret",
       TAPE_SECRET_FILE: path.join(dir, "tape.secret"),
-    },
+    }),
     stdio: ["ignore", "ignore", "pipe"],
   });
   try {
@@ -131,14 +137,10 @@ test("GET /tape is auth-gated and returns empty without postgres (no scratch lea
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "gv-tape-pull-"));
   const sqlite = path.join(dir, "scratch.sqlite");
   const child = spawn(process.execPath, [path.join(__dirname, "..", "server", "index.js")], {
-    env: {
-      ...process.env,
-      PORT: "0",
+    env: tapeEnv({
       SQLITE_PATH: sqlite,
-      DATABASE_URL: "",
-      TAPE_SECRET: "test-secret",
       TAPE_SECRET_FILE: path.join(dir, "tape.secret"),
-    },
+    }),
     stdio: ["ignore", "ignore", "pipe"],
   });
   try {
@@ -199,14 +201,10 @@ test("GET /scratch is auth-gated and returns SQLite reasons only (7d TTL)", asyn
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "gv-tape-scratch-get-"));
   const sqlite = path.join(dir, "scratch.sqlite");
   const child = spawn(process.execPath, [path.join(__dirname, "..", "server", "index.js")], {
-    env: {
-      ...process.env,
-      PORT: "0",
+    env: tapeEnv({
       SQLITE_PATH: sqlite,
-      DATABASE_URL: "",
-      TAPE_SECRET: "test-secret",
       TAPE_SECRET_FILE: path.join(dir, "tape.secret"),
-    },
+    }),
     stdio: ["ignore", "ignore", "pipe"],
   });
   try {
@@ -286,14 +284,10 @@ test("tape server caps bodies, minimizes pre-auth health, and omits CORS", async
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "gv-tape-hard-"));
   const sqlite = path.join(dir, "scratch.sqlite");
   const child = spawn(process.execPath, [path.join(__dirname, "..", "server", "index.js")], {
-    env: {
-      ...process.env,
-      PORT: "0",
+    env: tapeEnv({
       SQLITE_PATH: sqlite,
-      DATABASE_URL: "",
-      TAPE_SECRET: "test-secret",
       TAPE_SECRET_FILE: path.join(dir, "tape.secret"),
-    },
+    }),
     stdio: ["ignore", "ignore", "pipe"],
   });
   try {
@@ -314,6 +308,62 @@ test("tape server caps bodies, minimizes pre-auth health, and omits CORS", async
       body: JSON.stringify({ snapshot: null, scratch: { listings: [] }, pad: "x".repeat(1_200_000) }),
     });
     assert.equal(big.status, 413);
+  } finally {
+    child.kill();
+  }
+});
+
+test("listen host stays loopback unless Railway or TAPE_HOST says otherwise", () => {
+  assert.equal(listenHost({}), "127.0.0.1");
+  assert.equal(listenHost({ TAPE_HOST: "", RAILWAY_ENVIRONMENT: "" }), "127.0.0.1");
+  assert.equal(listenHost({ RAILWAY_ENVIRONMENT: "production" }), "0.0.0.0");
+  assert.equal(listenHost({ RAILWAY_PROJECT_ID: "eba1aaf2" }), "0.0.0.0");
+  assert.equal(listenHost({ TAPE_HOST: "127.0.0.1", RAILWAY_ENVIRONMENT: "production" }), "127.0.0.1");
+});
+
+test("railway postgres pool accepts the self-signed cert", () => {
+  const local = postgresPoolOptions("postgres://u:p@127.0.0.1:5432/grail");
+  assert.equal(local.ssl, undefined);
+  const disabled = postgresPoolOptions(
+    "postgresql://u:p@postgres.railway.internal:5432/railway?sslmode=disable",
+  );
+  assert.equal(disabled.ssl, undefined);
+  const pub = postgresPoolOptions(
+    "postgresql://u:p@example.proxy.rlwy.net:45568/railway?sslmode=require",
+  );
+  assert.deepEqual(pub.ssl, { rejectUnauthorized: false });
+  const internal = postgresPoolOptions("postgresql://u:p@postgres.railway.internal:5432/railway");
+  assert.deepEqual(internal.ssl, { rejectUnauthorized: false });
+});
+
+test("tape server binds all interfaces when Railway env is set", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "gv-tape-bind-"));
+  const child = spawn(process.execPath, [path.join(__dirname, "..", "server", "index.js")], {
+    env: tapeEnv({
+      SQLITE_PATH: path.join(dir, "scratch.sqlite"),
+      TAPE_SECRET_FILE: path.join(dir, "tape.secret"),
+      RAILWAY_ENVIRONMENT: "production",
+    }),
+    stdio: ["ignore", "ignore", "pipe"],
+  });
+  let buf = "";
+  try {
+    const port = await new Promise((resolve, reject) => {
+      const onData = (chunk) => {
+        buf += String(chunk);
+        const m = buf.match(/http:\/\/0\.0\.0\.0:(\d+)/);
+        if (m) {
+          child.stderr.off("data", onData);
+          resolve(Number(m[1]));
+        }
+      };
+      child.stderr.on("data", onData);
+      child.once("exit", (code) => reject(new Error("tape server exited " + code + "\n" + buf)));
+      setTimeout(() => reject(new Error("tape server did not bind\n" + buf)), 5000);
+    });
+    const health = await fetch(`http://127.0.0.1:${port}/health`);
+    assert.equal(health.status, 200);
+    assert.match(buf, /http:\/\/0\.0\.0\.0:/);
   } finally {
     child.kill();
   }
