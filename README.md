@@ -4,7 +4,7 @@ Chromium MV3 overlay. Reads eBay sold tape as you. Fast-Cash is **sold tape only
 
 ## Status
 
-**v2.0.1** — snappier capture + comps (see Performance)
+**v2.0.2** — hosted Tape URL (`https://*.up.railway.app`). Capture and comps stay as in 2.0.1 (see Performance).
 
 - Fast-Cash chip says **TAPE** or **NO TAPE**. Catalog book price is labeled Book ref and cannot be Applied.
 - Auto-capture (preference-gated) + capture meta; Continue solds pagination on sold search only.
@@ -46,6 +46,8 @@ DATABASE_URL=postgres://… TAPE_SECRET=$(openssl rand -hex 32) SQLITE_PATH=./da
 ```
 
 Options → Tape API `http://127.0.0.1:8787` + the printed secret. Skip this unless you want Postgres retention.
+
+A hosted Tape service on `https://….up.railway.app` works in the same field. The extension may call that host (`https://*.up.railway.app/*`). Loopback is unchanged. The Railway service variable `TAPE_SECRET` is the shared secret; `DATABASE_URL` stays on the service, not in the extension.
 
 ## Performance (2.0.1)
 
