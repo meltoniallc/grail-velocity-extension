@@ -1,4 +1,61 @@
-importScripts("lib/core.js", "lib/tape.js");
+importScripts("lib/core.js", "lib/tape.js", "lib/sync.js");
+
+/** Remote deadlines: typeahead must stay instant; pulls get a bit more room. */
+const SUGGEST_TIMEOUT_MS = 1200;
+const PULL_TIMEOUT_MS = 2500;
+const PUSH_TIMEOUT_MS = 8000;
+const INSPECT_TIMEOUT_MS = 5000;
+
+// Hot chrome.storage keys served from memory; refreshed by storage.onChanged.
+const local = globalThis.GVSync.createStorageCache(chrome.storage.local, chrome.storage.onChanged);
+const remoteSuggestCache = globalThis.GVSync.createTtlCache({ ttlMs: 20000, max: 200 });
+
+function timedFetch(url, init, ms) {
+  return globalThis.GVSync.fetchWithTimeout(fetch, url, init, ms);
+}
+
+/** POST /tape off the capture path: queued, persisted, retried. */
+async function sendTapePush(payload) {
+  const settings = await local.get(["tapeApi", "tapeSecret"]);
+  const endpoint = String(settings.tapeApi || "").replace(/\/+$/, "");
+  if (!endpoint) return { ok: true, skipped: "no-api" };
+  const headers = { "Content-Type": "application/json" };
+  if (settings.tapeSecret) headers["X-Tape-Secret"] = String(settings.tapeSecret);
+  try {
+    const res = await timedFetch(
+      `${endpoint}/tape`,
+      { method: "POST", headers, body: JSON.stringify(payload) },
+      PUSH_TIMEOUT_MS,
+    );
+    const body = await res.text();
+    await local.set({
+      tapeSync: { ok: res.ok, status: res.status, at: Date.now(), body: body.slice(0, 240) },
+    });
+    return { ok: res.ok, status: res.status };
+  } catch (err) {
+    await local.set({
+      tapeSync: { ok: false, error: String(err.message || err), at: Date.now() },
+    });
+    return { ok: false, error: String(err.message || err) };
+  }
+}
+
+const outbox = globalThis.GVSync.createOutbox({
+  storage: chrome.storage.local,
+  send: sendTapePush,
+  onSent: () => remoteSuggestCache.clear(),
+});
+
+/** Worker start: drain anything left from a suspended worker and warm the socket. */
+(async () => {
+  try {
+    outbox.flush();
+    const cfg = await tapeEndpoint();
+    if (cfg) timedFetch(`${cfg.endpoint}/health`, {}, PULL_TIMEOUT_MS).catch(() => {});
+  } catch {
+    /* best effort */
+  }
+})();
 
 chrome.runtime.onInstalled.addListener(() => {
   if (chrome.sidePanel?.setPanelBehavior) {
@@ -9,38 +66,20 @@ chrome.runtime.onInstalled.addListener(() => {
 function chromeAdapter() {
   return {
     async load() {
-      const data = await chrome.storage.local.get(["tapeSnapshots", "tapeScratch"]);
+      const data = await local.get(["tapeSnapshots", "tapeScratch"]);
       return { snapshots: data.tapeSnapshots || [], scratch: data.tapeScratch || [] };
     },
     async saveSnapshots(snapshots) {
-      await chrome.storage.local.set({ tapeSnapshots: snapshots });
+      await local.set({ tapeSnapshots: snapshots });
     },
     async saveScratch(scratch) {
-      await chrome.storage.local.set({ tapeScratch: scratch });
+      await local.set({ tapeScratch: scratch });
     },
     async pushRemote(payload) {
-      const settings = await chrome.storage.local.get(["tapeApi", "tapeSecret"]);
-      const endpoint = String(settings.tapeApi || "").replace(/\/+$/, "");
-      if (!endpoint) return { ok: true, skipped: "no-api" };
-      const headers = { "Content-Type": "application/json" };
-      if (settings.tapeSecret) headers["X-Tape-Secret"] = String(settings.tapeSecret);
-      try {
-        const res = await fetch(`${endpoint}/tape`, {
-          method: "POST",
-          headers,
-          body: JSON.stringify(payload),
-        });
-        const body = await res.text();
-        await chrome.storage.local.set({
-          tapeSync: { ok: res.ok, status: res.status, at: Date.now(), body: body.slice(0, 240) },
-        });
-        return { ok: res.ok, status: res.status };
-      } catch (err) {
-        await chrome.storage.local.set({
-          tapeSync: { ok: false, error: String(err.message || err), at: Date.now() },
-        });
-        return { ok: false, error: String(err.message || err) };
-      }
+      const settings = await local.get(["tapeApi"]);
+      if (!String(settings.tapeApi || "").trim()) return { ok: true, skipped: "no-api" };
+      // Returns immediately; the outbox owns delivery + tapeSync status.
+      return outbox.enqueue(payload);
     },
   };
 }
@@ -50,12 +89,12 @@ function store() {
 }
 
 async function catalog() {
-  const cached = await chrome.storage.local.get("catalog");
+  const cached = await local.get(["catalog"]);
   return cached.catalog || [];
 }
 
 async function tapeEndpoint() {
-  const settings = await chrome.storage.local.get(["tapeApi", "tapeSecret"]);
+  const settings = await local.get(["tapeApi", "tapeSecret"]);
   const endpoint = String(settings.tapeApi || "").replace(/\/+$/, "");
   if (!endpoint) return null;
   const headers = {};
@@ -67,13 +106,17 @@ async function tapeEndpoint() {
 async function fetchRemoteSuggest(q, limit) {
   const cfg = await tapeEndpoint();
   if (!cfg) return [];
+  const memoKey = `${cfg.endpoint}|${limit}|${String(q).toLowerCase()}`;
+  const memo = remoteSuggestCache.get(memoKey);
+  if (memo) return memo;
   try {
     const url = `${cfg.endpoint}/suggest?q=${encodeURIComponent(q)}&limit=${encodeURIComponent(String(limit))}`;
-    const res = await fetch(url, { headers: cfg.headers });
+    const res = await timedFetch(url, { headers: cfg.headers }, SUGGEST_TIMEOUT_MS);
     if (!res.ok) return [];
     const body = await res.json().catch(() => ({}));
-    const hits = Array.isArray(body.hits) ? body.hits : [];
-    return hits.filter((h) => h && h.kind === "tape");
+    const hits = (Array.isArray(body.hits) ? body.hits : []).filter((h) => h && h.kind === "tape");
+    remoteSuggestCache.set(memoKey, hits);
+    return hits;
   } catch {
     return [];
   }
@@ -96,7 +139,7 @@ async function fetchRemoteTape(q) {
   if (!needle) return null;
   try {
     const url = `${cfg.endpoint}/tape?q=${encodeURIComponent(needle)}`;
-    const res = await fetch(url, { headers: cfg.headers });
+    const res = await timedFetch(url, { headers: cfg.headers }, PULL_TIMEOUT_MS);
     if (!res.ok) return null;
     const body = await res.json().catch(() => null);
     if (!body || body.ok === false) return null;
@@ -216,7 +259,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         }
         const limit = msg.limit != null ? Number(msg.limit) : 40;
         const url = `${cfg.endpoint}/scratch?q=${encodeURIComponent(query)}&limit=${encodeURIComponent(String(limit))}`;
-        const res = await fetch(url, { headers: cfg.headers });
+        const res = await timedFetch(url, { headers: cfg.headers }, INSPECT_TIMEOUT_MS);
         if (res.status === 401) {
           sendResponse({ ok: false, error: "Secret does not match." });
           return;
@@ -258,14 +301,14 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
   if (msg?.type === "GV_TAPE_PING") {
     (async () => {
-      const settings = await chrome.storage.local.get(["tapeApi", "tapeSecret"]);
+      const settings = await local.get(["tapeApi", "tapeSecret"]);
       const endpoint = String(settings.tapeApi || "").replace(/\/+$/, "");
       if (!endpoint) {
         sendResponse({ ok: false, error: "Set Tape API first. Default is http://127.0.0.1:8787." });
         return;
       }
       try {
-        const healthRes = await fetch(`${endpoint}/health`);
+        const healthRes = await timedFetch(`${endpoint}/health`, {}, INSPECT_TIMEOUT_MS);
         const health = await healthRes.json().catch(() => ({}));
         if (!healthRes.ok || !health.ok) {
           sendResponse({ ok: false, error: "Tape API answered but is not healthy." });
@@ -273,7 +316,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         }
         const headers = {};
         if (settings.tapeSecret) headers["X-Tape-Secret"] = String(settings.tapeSecret);
-        const pingRes = await fetch(`${endpoint}/ping`, { headers });
+        const pingRes = await timedFetch(`${endpoint}/ping`, { headers }, INSPECT_TIMEOUT_MS);
         if (pingRes.status === 401) {
           sendResponse({
             ok: false,

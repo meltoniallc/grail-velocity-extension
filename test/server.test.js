@@ -332,7 +332,12 @@ test("railway postgres pool accepts the self-signed cert", () => {
     "postgresql://u:p@example.proxy.rlwy.net:45568/railway?sslmode=require",
   );
   assert.deepEqual(pub.ssl, { rejectUnauthorized: false });
-  const internal = postgresPoolOptions("postgresql://u:p@postgres.railway.internal:5432/railway");
+  const internal = postgresPoolOptions("postgresql://u:p@postgres.railway.internal:5432/railway", {
+    max: 8,
+    keepAlive: true,
+  });
+  assert.equal(internal.max, 8);
+  assert.equal(internal.keepAlive, true);
   assert.deepEqual(internal.ssl, { rejectUnauthorized: false });
 });
 

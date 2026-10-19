@@ -595,10 +595,14 @@
     typeQuery = typeQuery || query;
     render();
     try {
-      const cached = await chrome.runtime.sendMessage({ type: "GV_TAPE_GET", query }).catch(() => null);
+      // Tape lookup (may cold-hydrate from the Tape API) and the DOM scrape are
+      // independent: start both, then apply in the original order.
+      const cachedP = chrome.runtime.sendMessage({ type: "GV_TAPE_GET", query }).catch(() => null);
+      const listingsP = scrapeListings();
+      const cached = await cachedP;
       if (gen !== readGen) return;
       if (cached?.snapshot?.comps?.length) applySoldTape(cached.snapshot);
-      const listings = await scrapeListings();
+      const listings = await listingsP;
       if (gen !== readGen) return;
       const result = GV.verifyComps(query, listings);
       scanMeta = {

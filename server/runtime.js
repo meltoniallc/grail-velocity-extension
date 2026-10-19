@@ -19,8 +19,8 @@ function listenHost(env = process.env) {
  * node-pg treats sslmode=require as verify-full unless rejectUnauthorized is false.
  * Local URLs and sslmode=disable stay plaintext.
  */
-function postgresPoolOptions(connectionString) {
-  const options = { connectionString, max: 4 };
+function postgresPoolOptions(connectionString, extra = {}) {
+  const options = { connectionString, max: 4, ...extra };
   let host = "";
   let sslmode = "";
   try {

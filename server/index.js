@@ -2,6 +2,7 @@
 
 const http = require("node:http");
 const path = require("node:path");
+const zlib = require("node:zlib");
 const {
   openScratch,
   writeScratch,
@@ -9,6 +10,7 @@ const {
   suggestPostgres,
   getTapePostgres,
   getScratchSqlite,
+  ensurePostgresMigrations,
 } = require("./store");
 const { resolveSecret } = require("./secret");
 const { listenHost, postgresPoolOptions } = require("./runtime");
@@ -26,17 +28,40 @@ const TAPE_SECRET = secretInfo.secret;
 let pool = null;
 if (DATABASE_URL) {
   const { Pool } = require("pg");
-  pool = new Pool(postgresPoolOptions(DATABASE_URL));
+  pool = new Pool(
+    postgresPoolOptions(DATABASE_URL, {
+      max: Number(process.env.PG_POOL_MAX || 8),
+      idleTimeoutMillis: 60_000,
+      keepAlive: true,
+    }),
+  );
+  pool.on("error", (err) => process.stderr.write(`postgres pool error: ${err.message}\n`));
+  // Migrate + open a connection at boot so the first capture does not pay for DDL / TLS.
+  ensurePostgresMigrations(pool).catch((err) =>
+    process.stderr.write(`postgres migrations deferred: ${err.message}\n`),
+  );
 }
 
 const scratch = openScratch(SQLITE_PATH);
 
+const GZIP_MIN_BYTES = 1024;
+
 function send(res, status, body) {
   const json = JSON.stringify(body);
-  res.writeHead(status, {
-    "Content-Type": "application/json; charset=utf-8",
-    "Content-Length": Buffer.byteLength(json),
-  });
+  const req = res.req;
+  const accepts = String((req && req.headers["accept-encoding"]) || "");
+  const headers = { "Content-Type": "application/json; charset=utf-8", Vary: "Accept-Encoding" };
+  if (json.length >= GZIP_MIN_BYTES && /\bgzip\b/.test(accepts)) {
+    // Level 1: ~70% smaller /tape pulls for well under 1 ms of CPU.
+    const gz = zlib.gzipSync(json, { level: 1 });
+    headers["Content-Encoding"] = "gzip";
+    headers["Content-Length"] = gz.length;
+    res.writeHead(status, headers);
+    res.end(gz);
+    return;
+  }
+  headers["Content-Length"] = Buffer.byteLength(json);
+  res.writeHead(status, headers);
   res.end(json);
 }
 
@@ -146,6 +171,10 @@ const server = http.createServer(async (req, res) => {
     send(res, err.statusCode || 500, { ok: false, error: String(err.message || err) });
   }
 });
+
+// Keep sockets warm between captures (extension fetch reuses the connection).
+server.keepAliveTimeout = 65_000;
+server.headersTimeout = 66_000;
 
 if (require.main === module) {
   const host = listenHost();
