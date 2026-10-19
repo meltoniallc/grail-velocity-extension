@@ -252,7 +252,7 @@ test("getTapePostgres returns snapshot + verified_prices for one query_norm", as
   assert.ok(applied.has(1), "pull path runs additive migrations first");
 });
 
-test("ensurePostgresMigrations applies v1 once and is idempotent", async () => {
+test("ensurePostgresMigrations applies v1+v2 once and is idempotent", async () => {
   assert.ok(PG_MIGRATIONS.length >= 1);
   assert.equal(PG_MIGRATIONS[0].version, 1);
   assert.match(schemaMigrationsDdl(), /schema_migrations/);
@@ -277,16 +277,20 @@ test("ensurePostgresMigrations applies v1 once and is idempotent", async () => {
 
   const first = await ensurePostgresMigrations(pool);
   assert.equal(first.ok, true);
-  assert.deepEqual(first.applied, [1]);
-  assert.equal(first.latest, 1);
+  assert.deepEqual(first.applied, [1, 2]);
+  assert.equal(first.latest, 2);
 
   const second = await ensurePostgresMigrations(pool);
   assert.equal(second.ok, true);
   assert.deepEqual(second.applied, []);
-  assert.equal(applied.size, 1);
+  assert.equal(applied.size, 2);
 
   const inserts = sqlLog.filter((s) => /INSERT INTO schema_migrations/i.test(s));
-  assert.equal(inserts.length, 1);
+  assert.equal(inserts.length, 2);
+  // Memoized per pool: the second call issues no SQL at all.
+  const before = sqlLog.length;
+  await ensurePostgresMigrations(pool);
+  assert.equal(sqlLog.length, before);
 });
 
 test("writePostgres runs migrations before upserting verified solds", async () => {

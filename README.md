@@ -4,7 +4,7 @@ Chromium MV3 overlay. Reads eBay sold tape as you. Fast-Cash is **sold tape only
 
 ## Status
 
-**v2.0.0**
+**v2.0.1** — snappier capture + comps (see Performance)
 
 - Fast-Cash chip says **TAPE** or **NO TAPE**. Catalog book price is labeled Book ref and cannot be Applied.
 - Auto-capture (preference-gated) + capture meta; Continue solds pagination on sold search only.
@@ -46,3 +46,19 @@ DATABASE_URL=postgres://… TAPE_SECRET=$(openssl rand -hex 32) SQLITE_PATH=./da
 ```
 
 Options → Tape API `http://127.0.0.1:8787` + the printed secret. Skip this unless you want Postgres retention.
+
+## Performance (2.0.1)
+
+- Capture answers the overlay as soon as Chrome tape is written; `POST /tape` goes through a persisted
+  outbox (`tapeOutbox`, FIFO, retry with backoff, flushed on worker start).
+- Service worker serves hot `chrome.storage` keys from memory (refreshed via `storage.onChanged`).
+- Remote calls have deadlines (suggest 1.2s, pull 2.5s); remote suggest hits are memoized 20s.
+- Overlay starts the tape lookup and the DOM scrape in parallel.
+- Server: SQLite WAL + one transaction per write; Postgres migrations once per process, snapshot +
+  verified solds in one transaction with a single `unnest` batch upsert, parallel `/tape` reads,
+  migration v2 indexes (prefix, `updated_at`, `(query_norm, seen_at)`, optional `pg_trgm`), gzip ≥1KB,
+  keep-alive.
+
+Bench (local, no eBay traffic): `node bench/latency.js` (add `DATABASE_URL=…` for Postgres — it
+**truncates** the tape tables, so point it at a scratch DB; `BENCH_RTT_MS=80` models a remote server).
+`TEST_DATABASE_URL=… npm test` also runs the live Postgres test.

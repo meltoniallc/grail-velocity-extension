@@ -18,6 +18,7 @@ const INCLUDE = [
   "lib/tape.js",
   "lib/overlay.js",
   "lib/suggest.js",
+  "lib/sync.js",
   "content/ebay.js",
   "content/overlay.css",
   "popup/index.html",
