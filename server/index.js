@@ -13,7 +13,7 @@ const {
   ensurePostgresMigrations,
 } = require("./store");
 const { resolveSecret } = require("./secret");
-const { listenHost, postgresPoolOptions } = require("./runtime");
+const { listenHost, postgresPoolOptions, secretMatches } = require("./runtime");
 
 const PORT = Number(process.env.PORT || 8787);
 const SQLITE_PATH = process.env.SQLITE_PATH || path.join(__dirname, "..", "data", "scratch.sqlite");
@@ -66,8 +66,7 @@ function send(res, status, body) {
 }
 
 function unauthorized(req) {
-  if (!TAPE_SECRET) return false;
-  return String(req.headers["x-tape-secret"] || "") !== TAPE_SECRET;
+  return !secretMatches(TAPE_SECRET, req.headers["x-tape-secret"]);
 }
 
 function readBody(req) {
@@ -177,12 +176,20 @@ server.keepAliveTimeout = 65_000;
 server.headersTimeout = 66_000;
 
 if (require.main === module) {
+  const railway = Boolean(String(process.env.RAILWAY_ENVIRONMENT || "").trim());
+  if (railway && secretInfo.source !== "env") {
+    process.stderr.write("Refusing to start on Railway without TAPE_SECRET set on the service.\n");
+    process.exit(1);
+  }
   const host = listenHost();
   server.listen(PORT, host, () => {
     const addr = server.address();
     const port = typeof addr === "object" && addr ? addr.port : PORT;
+    const secretLine = railway
+      ? "Tape secret is the TAPE_SECRET variable on this service (not printed).\n"
+      : `Paste this secret in Grail Velocity Options:\n${TAPE_SECRET}\n(source: ${secretInfo.source}, file: ${secretInfo.filePath})\n`;
     process.stderr.write(
-      `Grail Velocity tape on http://${host}:${port} (postgres ${pool ? "on" : "off"}, sqlite ${SQLITE_PATH})\nPaste this secret in Grail Velocity Options:\n${TAPE_SECRET}\n(source: ${secretInfo.source}, file: ${secretInfo.filePath})\nThen: Tape API http://${host}:${port} → Save → Check connection.\n`,
+      `Grail Velocity tape on http://${host}:${port} (postgres ${pool ? "on" : "off"}, sqlite ${SQLITE_PATH})\n${secretLine}Then: Tape API http://${host}:${port} → Save → Check connection.\n`,
     );
   });
 }

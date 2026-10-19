@@ -43,20 +43,28 @@ async function load() {
 
 async function save() {
   const tapeApi = apiUrl();
+  if (tapeApi && !globalThis.GV.tapeApiAllowed(tapeApi)) {
+    setStatus(
+      "Tape API must be http://127.0.0.1:8787 or https://tape-production-2810.up.railway.app.",
+      "bad",
+    );
+    return false;
+  }
   const tapeSecret = secretValue();
   const autoCapture = document.getElementById("autoCapture").checked;
   await chrome.storage.local.set({ tapeApi, tapeSecret, autoCapture });
+  return true;
 }
 
 document.getElementById("opts").addEventListener("submit", async (e) => {
   e.preventDefault();
-  await save();
+  if (!(await save())) return;
   setStatus("Saved. Reload eBay tabs if the API URL changed.", "ok");
 });
 
 document.getElementById("mint").addEventListener("click", async () => {
   document.getElementById("tapeSecret").value = mintSecret();
-  await save();
+  if (!(await save())) return;
   setStatus("New secret saved here. Copy the npm command, stop the old server, and start it with that command so both sides match.", "ok");
 });
 
@@ -67,19 +75,19 @@ document.getElementById("copySecret").addEventListener("click", async () => {
     return;
   }
   await navigator.clipboard.writeText(secret);
-  await save();
+  if (!(await save())) return;
   setStatus("Secret copied.", "ok");
 });
 
 document.getElementById("copyCmd").addEventListener("click", async () => {
   if (!secretValue()) document.getElementById("tapeSecret").value = mintSecret();
-  await save();
+  if (!(await save())) return;
   await navigator.clipboard.writeText(npmCommand());
   setStatus("Copied. In the grail-velocity folder (the one with package.json): paste that command. The server will print the same secret on boot.", "ok");
 });
 
 document.getElementById("check").addEventListener("click", async () => {
-  await save();
+  if (!(await save())) return;
   setStatus("Checking…");
   try {
     const res = await chrome.runtime.sendMessage({ type: "GV_TAPE_PING" });
@@ -99,7 +107,7 @@ document.getElementById("check").addEventListener("click", async () => {
 });
 
 document.getElementById("pull").addEventListener("click", async () => {
-  await save();
+  if (!(await save())) return;
   const query = document.getElementById("pullQuery").value.trim();
   if (!query) {
     setStatus("Enter a query to pull (one query_norm from Postgres).", "bad");
@@ -157,7 +165,7 @@ function paintScratchReasons(reasons, emptyText) {
 }
 
 async function inspectScratch(remote) {
-  await save();
+  if (!(await save())) return;
   const query = document.getElementById("pullQuery").value.trim();
   if (!query) {
     setStatus("Enter a query to inspect scratch.", "bad");

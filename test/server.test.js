@@ -9,7 +9,7 @@ const { spawn } = require("node:child_process");
 const { loadScripts } = require("./load-core");
 
 const { GV } = loadScripts(["lib/core.js"]);
-const { listenHost, postgresPoolOptions } = require("../server/runtime");
+const { listenHost, postgresPoolOptions, secretMatches } = require("../server/runtime");
 
 function tapeEnv(extra) {
   return {
@@ -313,6 +313,29 @@ test("tape server caps bodies, minimizes pre-auth health, and omits CORS", async
   }
 });
 
+test("tape API allowlist is loopback or the one hosted Tape host", () => {
+  assert.equal(GV.tapeApiAllowed("http://127.0.0.1:8787"), true);
+  assert.equal(
+    GV.tapeApiAllowed(`http://${String.fromCharCode(108, 111, 99, 97, 108, 104, 111, 115, 116)}:8787/`),
+    true,
+  );
+  assert.equal(GV.tapeApiAllowed("https://tape-production-2810.up.railway.app"), true);
+  assert.equal(GV.tapeApiAllowed("https://tape-production-2810.up.railway.app/tape"), true);
+  assert.equal(GV.tapeApiAllowed("https://other.up.railway.app"), false);
+  assert.equal(GV.tapeApiAllowed("http://tape-production-2810.up.railway.app"), false);
+  assert.equal(GV.tapeApiAllowed("https://user:pw@tape-production-2810.up.railway.app"), false);
+  assert.equal(GV.tapeApiAllowed("https://evil.example"), false);
+  assert.equal(GV.tapeApiAllowed(""), false);
+});
+
+test("tape secret compare does not treat a prefix as a match", () => {
+  assert.equal(secretMatches("abcdef1234567890", "abcdef1234567890"), true);
+  assert.equal(secretMatches("abcdef1234567890", "abcdef1234567890extra"), false);
+  assert.equal(secretMatches("abcdef1234567890", "abcdef1234567891"), false);
+  assert.equal(secretMatches("abcdef1234567890", ""), false);
+  assert.equal(secretMatches("", "anything"), true);
+});
+
 test("listen host stays loopback unless Railway or TAPE_HOST says otherwise", () => {
   assert.equal(listenHost({}), "127.0.0.1");
   assert.equal(listenHost({ TAPE_HOST: "", RAILWAY_ENVIRONMENT: "" }), "127.0.0.1");
@@ -339,6 +362,33 @@ test("railway postgres pool accepts the self-signed cert", () => {
   assert.equal(internal.max, 8);
   assert.equal(internal.keepAlive, true);
   assert.deepEqual(internal.ssl, { rejectUnauthorized: false });
+});
+
+test("Railway refuses to boot without TAPE_SECRET and does not print a generated secret", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "gv-tape-nosecret-"));
+  const child = spawn(process.execPath, [path.join(__dirname, "..", "server", "index.js")], {
+    env: tapeEnv({
+      SQLITE_PATH: path.join(dir, "scratch.sqlite"),
+      TAPE_SECRET_FILE: path.join(dir, "tape.secret"),
+      TAPE_SECRET: "",
+      RAILWAY_ENVIRONMENT: "production",
+    }),
+    stdio: ["ignore", "ignore", "pipe"],
+  });
+  let buf = "";
+  const code = await new Promise((resolve) => {
+    child.stderr.on("data", (chunk) => {
+      buf += String(chunk);
+    });
+    child.once("exit", (c) => resolve(c));
+    setTimeout(() => {
+      child.kill();
+      resolve(null);
+    }, 5000);
+  });
+  assert.equal(code, 1);
+  assert.match(buf, /TAPE_SECRET/);
+  assert.doesNotMatch(buf, /Paste this secret/);
 });
 
 test("tape server binds all interfaces when Railway env is set", async () => {
