@@ -5,7 +5,7 @@ const path = require("node:path");
 const vm = require("node:vm");
 
 function makeCtx() {
-  const ctx = { console };
+  const ctx = { console, URL, URLSearchParams };
   ctx.self = ctx;
   ctx.window = ctx;
   ctx.globalThis = ctx;

@@ -1,11 +1,18 @@
 {
   "manifest_version": 3,
   "name": "Grail Velocity",
-  "version": "2.0.0",
+  "version": "2.0.2",
   "description": "Meltonia operator desk on eBay. Fast-Cash is sold tape only. Auto-capture records pages you open.",
-  "permissions": ["storage", "tabs", "sidePanel", "scripting", "alarms"],
+  "permissions": [
+    "storage",
+    "tabs",
+    "sidePanel",
+    "scripting",
+    "alarms"
+  ],
   "host_permissions": [
     "https://*.ebay.com/*",
+    "https://tape-production-2810.up.railway.app/*",
     "http://127.0.0.1/*",
     "http://localhost/*"
   ],
@@ -30,10 +37,13 @@
   },
   "content_scripts": [
     {
-      "matches": ["https://*.ebay.com/*"],
+      "matches": [
+        "https://*.ebay.com/*"
+      ],
       "js": [
         "lib/core.js",
         "lib/overlay.js",
+        "lib/suggest.js",
         "lib/cardfields.js",
         "lib/observe.js",
         "content/parsers/common.js",
@@ -49,8 +59,14 @@
   ],
   "web_accessible_resources": [
     {
-      "resources": ["content/overlay.css", "catalog.json", "icons/*"],
-      "matches": ["https://*.ebay.com/*"]
+      "resources": [
+        "content/overlay.css",
+        "catalog.json",
+        "icons/*"
+      ],
+      "matches": [
+        "https://*.ebay.com/*"
+      ]
     }
   ],
   "icons": {

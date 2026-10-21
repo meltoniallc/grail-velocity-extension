@@ -1,11 +1,82 @@
 importScripts(
   "lib/core.js",
   "lib/tape.js",
+  "lib/sync.js",
   "lib/cardfields.js",
   "lib/observe.js",
   "lib/outbox.js",
   "lib/capture-runtime.js",
 );
+
+/** Remote deadlines: typeahead must stay instant; pulls get a bit more room. */
+const SUGGEST_TIMEOUT_MS = 1200;
+const PULL_TIMEOUT_MS = 2500;
+const PUSH_TIMEOUT_MS = 8000;
+const INSPECT_TIMEOUT_MS = 5000;
+
+// Hot chrome.storage keys served from memory; refreshed by storage.onChanged.
+const local = globalThis.GVSync.createStorageCache(chrome.storage.local, chrome.storage.onChanged);
+const remoteSuggestCache = globalThis.GVSync.createTtlCache({ ttlMs: 20000, max: 200 });
+
+function timedFetch(url, init, ms) {
+  return globalThis.GVSync.fetchWithTimeout(fetch, url, init, ms);
+}
+
+/** POST /tape off the capture path: queued, persisted, retried. */
+function tapeTarget(settings) {
+  const endpoint = String(settings.tapeApi || "").replace(/\/+$/, "");
+  if (!endpoint) return { endpoint: "", missing: true, allowed: false, headers: {} };
+  const allowed = globalThis.GV.tapeApiAllowed(endpoint);
+  const headers = {};
+  if (allowed && settings.tapeSecret) headers["X-Tape-Secret"] = String(settings.tapeSecret);
+  return { endpoint, missing: false, allowed, headers };
+}
+
+async function sendTapePush(payload) {
+  const target = tapeTarget(await local.get(["tapeApi", "tapeSecret"]));
+  if (target.missing) return { ok: true, skipped: "no-api" };
+  if (!target.allowed) {
+    const error = "Tape API host is not allowed.";
+    await local.set({ tapeSync: { ok: false, error, at: Date.now() } });
+    return { ok: false, error };
+  }
+  const endpoint = target.endpoint;
+  const headers = { "Content-Type": "application/json", ...target.headers };
+  try {
+    const res = await timedFetch(
+      `${endpoint}/tape`,
+      { method: "POST", headers, body: JSON.stringify(payload) },
+      PUSH_TIMEOUT_MS,
+    );
+    const body = await res.text();
+    await local.set({
+      tapeSync: { ok: res.ok, status: res.status, at: Date.now(), body: body.slice(0, 240) },
+    });
+    return { ok: res.ok, status: res.status };
+  } catch (err) {
+    await local.set({
+      tapeSync: { ok: false, error: String(err.message || err), at: Date.now() },
+    });
+    return { ok: false, error: String(err.message || err) };
+  }
+}
+
+const outbox = globalThis.GVSync.createOutbox({
+  storage: chrome.storage.local,
+  send: sendTapePush,
+  onSent: () => remoteSuggestCache.clear(),
+});
+
+/** Worker start: drain anything left from a suspended worker and warm the socket. */
+(async () => {
+  try {
+    outbox.flush();
+    const cfg = await tapeEndpoint();
+    if (cfg) timedFetch(`${cfg.endpoint}/health`, {}, PULL_TIMEOUT_MS).catch(() => {});
+  } catch {
+    /* best effort */
+  }
+})();
 
 chrome.runtime.onInstalled.addListener(() => {
   if (chrome.sidePanel?.setPanelBehavior) {
@@ -16,38 +87,20 @@ chrome.runtime.onInstalled.addListener(() => {
 function chromeAdapter() {
   return {
     async load() {
-      const data = await chrome.storage.local.get(["tapeSnapshots", "tapeScratch"]);
+      const data = await local.get(["tapeSnapshots", "tapeScratch"]);
       return { snapshots: data.tapeSnapshots || [], scratch: data.tapeScratch || [] };
     },
     async saveSnapshots(snapshots) {
-      await chrome.storage.local.set({ tapeSnapshots: snapshots });
+      await local.set({ tapeSnapshots: snapshots });
     },
     async saveScratch(scratch) {
-      await chrome.storage.local.set({ tapeScratch: scratch });
+      await local.set({ tapeScratch: scratch });
     },
     async pushRemote(payload) {
-      const settings = await chrome.storage.local.get(["tapeApi", "tapeSecret"]);
-      const endpoint = String(settings.tapeApi || "").replace(/\/+$/, "");
-      if (!endpoint) return { ok: true, skipped: "no-api" };
-      const headers = { "Content-Type": "application/json" };
-      if (settings.tapeSecret) headers["X-Tape-Secret"] = String(settings.tapeSecret);
-      try {
-        const res = await fetch(`${endpoint}/tape`, {
-          method: "POST",
-          headers,
-          body: JSON.stringify(payload),
-        });
-        const body = await res.text();
-        await chrome.storage.local.set({
-          tapeSync: { ok: res.ok, status: res.status, at: Date.now(), body: body.slice(0, 240) },
-        });
-        return { ok: res.ok, status: res.status };
-      } catch (err) {
-        await chrome.storage.local.set({
-          tapeSync: { ok: false, error: String(err.message || err), at: Date.now() },
-        });
-        return { ok: false, error: String(err.message || err) };
-      }
+      const settings = await local.get(["tapeApi"]);
+      if (!String(settings.tapeApi || "").trim()) return { ok: true, skipped: "no-api" };
+      // Returns immediately; the outbox owns delivery + tapeSync status.
+      return outbox.enqueue(payload);
     },
   };
 }
@@ -57,8 +110,95 @@ function store() {
 }
 
 async function catalog() {
-  const cached = await chrome.storage.local.get("catalog");
+  const cached = await local.get(["catalog"]);
   return cached.catalog || [];
+}
+
+async function tapeEndpoint() {
+  const target = tapeTarget(await local.get(["tapeApi", "tapeSecret"]));
+  if (target.missing || !target.allowed) return null;
+  return { endpoint: target.endpoint, headers: target.headers };
+}
+
+/** Optional GET /suggest when local Chrome tape is miss/thin. Tape hits only; never opens sold tabs. */
+async function fetchRemoteSuggest(q, limit) {
+  const cfg = await tapeEndpoint();
+  if (!cfg) return [];
+  const memoKey = `${cfg.endpoint}|${limit}|${String(q).toLowerCase()}`;
+  const memo = remoteSuggestCache.get(memoKey);
+  if (memo) return memo;
+  try {
+    const url = `${cfg.endpoint}/suggest?q=${encodeURIComponent(q)}&limit=${encodeURIComponent(String(limit))}`;
+    const res = await timedFetch(url, { headers: cfg.headers }, SUGGEST_TIMEOUT_MS);
+    if (!res.ok) return [];
+    const body = await res.json().catch(() => ({}));
+    const hits = (Array.isArray(body.hits) ? body.hits : []).filter((h) => h && h.kind === "tape");
+    remoteSuggestCache.set(memoKey, hits);
+    return hits;
+  } catch {
+    return [];
+  }
+}
+
+async function suggestWithRemoteFallback(q, limit) {
+  const needle = String(q || "").trim();
+  const localHits = await store().suggest(needle, { catalog: await catalog(), limit });
+  if (!needle || !globalThis.GV.localTapeThin(localHits)) return localHits;
+  const remoteHits = await fetchRemoteSuggest(needle, limit);
+  if (!remoteHits.length) return localHits;
+  return globalThis.GV.mergeSuggestHits(localHits, remoteHits, { limit });
+}
+
+/** Optional GET /tape?q= — verified solds only; never scratch. */
+async function fetchRemoteTape(q) {
+  const cfg = await tapeEndpoint();
+  if (!cfg) return null;
+  const needle = String(q || "").trim();
+  if (!needle) return null;
+  try {
+    const url = `${cfg.endpoint}/tape?q=${encodeURIComponent(needle)}`;
+    const res = await timedFetch(url, { headers: cfg.headers }, PULL_TIMEOUT_MS);
+    if (!res.ok) return null;
+    const body = await res.json().catch(() => null);
+    if (!body || body.ok === false) return null;
+    return {
+      source: body.source || "postgres",
+      snapshot: body.snapshot || null,
+      verifiedPrices: Array.isArray(body.verifiedPrices) ? body.verifiedPrices : [],
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Cold-start / Options pull: hydrate Chrome tapeSnapshots from Postgres.
+ * Local durable comps win; scratch is never imported; write path unchanged.
+ */
+async function pullAndHydrate(q) {
+  const remote = await fetchRemoteTape(q);
+  if (!remote) return { ok: false, error: "No Tape API response (is the server running?)." };
+  if (!remote.snapshot && !(remote.verifiedPrices || []).length) {
+    return { ok: true, snapshot: null, hydrated: false, source: remote.source };
+  }
+  const snapshot = await store().hydrateFromRemote(remote);
+  return {
+    ok: true,
+    snapshot,
+    hydrated: Boolean(snapshot),
+    source: remote.source,
+    nComps: snapshot ? (snapshot.comps || []).length : 0,
+  };
+}
+
+async function getSnapshotWithColdHydrate(q) {
+  const needle = String(q || "").trim();
+  let snapshot = await store().getSnapshot(needle);
+  if (snapshot && (snapshot.comps || []).length) return snapshot;
+  if (!needle) return snapshot;
+  const pulled = await pullAndHydrate(needle);
+  if (pulled.hydrated && pulled.snapshot) return pulled.snapshot;
+  return snapshot;
 }
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
@@ -80,15 +220,84 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
   if (msg?.type === "GV_SUGGEST") {
     (async () => {
-      const hits = await store().suggest(msg.q || "", { catalog: await catalog(), limit: 8 });
+      const hits = await suggestWithRemoteFallback(msg.q || "", 8);
       sendResponse({ hits });
     })();
     return true;
   }
   if (msg?.type === "GV_TAPE_GET") {
     (async () => {
-      const snapshot = await store().getSnapshot(msg.query || "");
+      // Cold local tape: optional Postgres hydrate (verified solds only).
+      const snapshot = await getSnapshotWithColdHydrate(msg.query || "");
       sendResponse({ snapshot });
+    })();
+    return true;
+  }
+  if (msg?.type === "GV_TAPE_PULL") {
+    (async () => {
+      try {
+        const result = await pullAndHydrate(msg.query || "");
+        sendResponse(result);
+      } catch (err) {
+        sendResponse({ ok: false, error: String(err.message || err) });
+      }
+    })();
+    return true;
+  }
+  if (msg?.type === "GV_SCRATCH_GET") {
+    (async () => {
+      try {
+        const query = msg.query || "";
+        const scratch = await store().getScratch(query);
+        sendResponse({
+          ok: true,
+          source: "local",
+          queryNorm: globalThis.GVTape.queryNorm(query),
+          listings: scratch.listings || [],
+          entries: scratch.entries || [],
+        });
+      } catch (err) {
+        sendResponse({ ok: false, error: String(err.message || err) });
+      }
+    })();
+    return true;
+  }
+  if (msg?.type === "GV_SCRATCH_REMOTE") {
+    (async () => {
+      try {
+        const cfg = await tapeEndpoint();
+        if (!cfg) {
+          sendResponse({ ok: false, error: "Set Tape API first." });
+          return;
+        }
+        const query = String(msg.query || "").trim();
+        if (!query) {
+          sendResponse({ ok: false, error: "Enter a query to inspect scratch." });
+          return;
+        }
+        const limit = msg.limit != null ? Number(msg.limit) : 40;
+        const url = `${cfg.endpoint}/scratch?q=${encodeURIComponent(query)}&limit=${encodeURIComponent(String(limit))}`;
+        const res = await timedFetch(url, { headers: cfg.headers }, INSPECT_TIMEOUT_MS);
+        if (res.status === 401) {
+          sendResponse({ ok: false, error: "Secret does not match." });
+          return;
+        }
+        if (!res.ok) {
+          sendResponse({ ok: false, error: `Tape API returned ${res.status}.` });
+          return;
+        }
+        const body = await res.json().catch(() => ({}));
+        sendResponse({
+          ok: true,
+          source: body.source || "sqlite",
+          queryNorm: body.queryNorm || "",
+          listings: Array.isArray(body.listings) ? body.listings : [],
+          scans: Array.isArray(body.scans) ? body.scans : [],
+          ttlDays: body.ttlDays || 7,
+        });
+      } catch (err) {
+        sendResponse({ ok: false, error: String(err.message || err) });
+      }
     })();
     return true;
   }
@@ -99,6 +308,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         verified: msg.verified,
         velocity: msg.velocity,
         url: msg.url,
+        mode: msg.mode,
+        pageMode: msg.pageMode,
+        stoppedAt: msg.stoppedAt,
+        nCliff: msg.nCliff,
       });
       sendResponse({ snapshot });
     })();
@@ -106,22 +319,29 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
   if (msg?.type === "GV_TAPE_PING") {
     (async () => {
-      const settings = await chrome.storage.local.get(["tapeApi", "tapeSecret"]);
-      const endpoint = String(settings.tapeApi || "").replace(/\/+$/, "");
-      if (!endpoint) {
+      const target = tapeTarget(await local.get(["tapeApi", "tapeSecret"]));
+      if (target.missing) {
         sendResponse({ ok: false, error: "Set Tape API first. Default is http://127.0.0.1:8787." });
         return;
       }
+      if (!target.allowed) {
+        sendResponse({
+          ok: false,
+          error:
+            "Tape API must be http://127.0.0.1:8787 or https://tape-production-2810.up.railway.app.",
+        });
+        return;
+      }
+      const endpoint = target.endpoint;
       try {
-        const healthRes = await fetch(`${endpoint}/health`);
+        const healthRes = await timedFetch(`${endpoint}/health`, {}, INSPECT_TIMEOUT_MS);
         const health = await healthRes.json().catch(() => ({}));
         if (!healthRes.ok || !health.ok) {
           sendResponse({ ok: false, error: "Tape API answered but is not healthy." });
           return;
         }
-        const headers = {};
-        if (settings.tapeSecret) headers["X-Tape-Secret"] = String(settings.tapeSecret);
-        const pingRes = await fetch(`${endpoint}/ping`, { headers });
+        const headers = target.headers;
+        const pingRes = await timedFetch(`${endpoint}/ping`, { headers }, INSPECT_TIMEOUT_MS);
         if (pingRes.status === 401) {
           sendResponse({
             ok: false,
@@ -165,26 +385,27 @@ function captureRuntime() {
           if (chrome.action.setBadgeTextColor) await chrome.action.setBadgeTextColor({ color: "#050505" });
         },
         postObserve: async (rows) => {
-          const settings = await chrome.storage.local.get(["tapeApi", "tapeSecret"]);
-          const endpoint = String(settings.tapeApi || "").replace(/\/+$/, "");
-          if (!endpoint) return { ok: false, error: "no-api" };
-          const headers = { "Content-Type": "application/json" };
-          if (settings.tapeSecret) headers["X-Tape-Secret"] = String(settings.tapeSecret);
-          const res = await fetch(`${endpoint}/observe`, {
-            method: "POST",
-            headers,
-            body: JSON.stringify({ observations: rows }),
-          });
+          // Same host lock as POST /tape: the shared secret only goes to an allowed Tape API.
+          const target = tapeTarget(await local.get(["tapeApi", "tapeSecret"]));
+          if (target.missing) return { ok: false, error: "no-api" };
+          if (!target.allowed) return { ok: false, error: "Tape API host is not allowed." };
+          const headers = { "Content-Type": "application/json", ...target.headers };
+          const res = await timedFetch(
+            `${target.endpoint}/observe`,
+            { method: "POST", headers, body: JSON.stringify({ observations: rows }) },
+            PUSH_TIMEOUT_MS,
+          );
           if (!res.ok) return { ok: false, status: res.status, error: `status ${res.status}` };
           return { ok: true, status: res.status };
         },
         searchObserved: async (q) => {
-          const settings = await chrome.storage.local.get(["tapeApi", "tapeSecret"]);
-          const endpoint = String(settings.tapeApi || "").replace(/\/+$/, "");
-          if (!endpoint) return [];
-          const headers = {};
-          if (settings.tapeSecret) headers["X-Tape-Secret"] = String(settings.tapeSecret);
-          const res = await fetch(`${endpoint}/comps?q=${encodeURIComponent(q)}`, { headers });
+          const cfg = await tapeEndpoint();
+          if (!cfg) return [];
+          const res = await timedFetch(
+            `${cfg.endpoint}/comps?q=${encodeURIComponent(q)}`,
+            { headers: cfg.headers },
+            PULL_TIMEOUT_MS,
+          );
           if (!res.ok) return [];
           const body = await res.json();
           return Array.isArray(body.hits) ? body.hits : [];

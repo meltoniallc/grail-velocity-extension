@@ -17,6 +17,8 @@ const INCLUDE = [
   "lib/core.js",
   "lib/tape.js",
   "lib/overlay.js",
+  "lib/suggest.js",
+  "lib/sync.js",
   "lib/cardfields.js",
   "lib/observe.js",
   "lib/outbox.js",

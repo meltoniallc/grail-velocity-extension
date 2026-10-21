@@ -21,40 +21,32 @@
   let typeGen = 0;
   let statusMsg = "";
   let settings = { ...GV.DEFAULT_FEES };
+  let autoCapture = true;
   let lastSig = "";
   let observeTimer = null;
   let statusTimer = null;
+  let canContinueSolds = false;
+  let nextSoldHref = null;
+  let followingSoldPage = false;
+  let tapeSync = null;
 
   function cssUrl() {
     return chrome.runtime.getURL("content/overlay.css");
   }
 
   async function loadCatalog() {
-    try {
-      const cached = await chrome.storage.local.get(["catalog", "catalogAt"]);
-      if (cached.catalog && Date.now() - (cached.catalogAt || 0) < 1000 * 60 * 60 * 12) {
-        catalog = cached.catalog;
-        return;
-      }
-    } catch {
-      /* ignore */
-    }
-    try {
-      const res = await fetch(chrome.runtime.getURL("catalog.json"));
-      catalog = await res.json();
-      await chrome.storage.local.set({ catalog, catalogAt: Date.now() });
-    } catch {
-      catalog = [];
-    }
+    catalog = await GV.loadCatalog();
   }
 
   async function loadPrefs() {
     try {
-      const stored = await chrome.storage.local.get(["fees", "overlayOpen"]);
+      const stored = await chrome.storage.local.get(["fees", "overlayOpen", "autoCapture", "tapeSync"]);
       if (stored.fees && typeof stored.fees === "object") {
         settings = { ...GV.DEFAULT_FEES, ...stored.fees };
       }
       if (typeof stored.overlayOpen === "boolean") open = stored.overlayOpen;
+      autoCapture = GV.autoCaptureEnabled(stored.autoCapture);
+      if (stored.tapeSync && typeof stored.tapeSync === "object") tapeSync = stored.tapeSync;
     } catch {
       /* ignore */
     }
@@ -138,6 +130,7 @@
 
   function cashNote() {
     const soldKept = soldTape.filter((row) => row.keep);
+    if (scanMeta.nCliff) return GV.deskStatusLine("cliffed");
     if (pageMode === "sold") {
       return velocity?.reasons?.[0] || "Scrape solds, then apply.";
     }
@@ -147,11 +140,14 @@
     if (pageRows.length) {
       return "Scraped live asks. Open solds for comps. Live prices never set Fast-Cash.";
     }
-    return "Scrape this page for high-match titles. Open solds when you need comps.";
+    return GV.deskStatusLine("watching");
   }
 
   function emptyListMsg() {
-    if (scraping) return "Reading this tab…";
+    if (scraping || (!pageRows.length && pageMode === "sold")) return GV.deskStatusLine("watching");
+    if (scanMeta.nCliff && !pageRows.filter((row) => row.keep).length) {
+      return GV.deskStatusLine("cliffed");
+    }
     if (pageMode === "sold") {
       return "Sold results are still loading, or selectors missed this layout. Wait a beat or scrape again.";
     }
@@ -179,11 +175,28 @@
     const avg =
       kept.length > 0 ? kept.reduce((sum, row) => sum + (row.matchScore || 0), 0) / kept.length : 0;
     const droppedCount = pageRows.length - kept.length;
+    const captureKey = GV.captureStatus({
+      scraping,
+      nCliff: scanMeta.nCliff,
+      nRaw: scanMeta.nRaw,
+      pageRows,
+      soldTape,
+    });
+    const captureLine = GV.deskStatusLine(captureKey);
+    const syncInfo = GV.formatTapeSync(tapeSync);
+    const tapeChip = fast != null ? "TAPE" : "NO TAPE";
+    const tapeHint =
+      fast != null
+        ? kept.length
+          ? matchPct(avg) + " match on this page"
+          : "Sold comps only — Apply uses this price."
+        : GV.deskNoTapeLine();
     wrap.innerHTML = `
       <div class="gv-head">
         <div>
           <p class="gv-kicker">${esc(modeLabel())}</p>
           <p class="gv-title">High-match tape</p>
+          <p class="gv-sync ${esc(syncInfo.kind)}" title="${esc(syncInfo.detail)}" data-tape-sync="${esc(syncInfo.kind)}">${esc(syncInfo.label)}</p>
         </div>
         <button class="gv-x" type="button" data-act="close" aria-label="Hide">×</button>
       </div>
@@ -199,7 +212,7 @@
                   (hit) => `<li>
                     <button type="button" data-act="hit" data-q="${esc(hit.query || hit.title)}" data-kind="${esc(hit.kind)}">
                       <span>${esc(hit.title)}</span>
-                      <span class="gv-price">${hit.kind === "tape" ? GV.money(hit.fastCash) : "book"}</span>
+                      <span class="gv-price">${hit.kind === "tape" ? GV.money(hit.fastCash) : "catalog"}</span>
                     </button>
                   </li>`,
                 )
@@ -207,6 +220,7 @@
             : ""
         }
         <p class="gv-q">${esc(query || "No query on this page")}</p>
+        <p class="gv-id" data-capture-status="${esc(captureKey)}">${esc(captureLine)}</p>
         ${
           sku
             ? `<div class="gv-sku">
@@ -216,7 +230,7 @@
                   <p>${esc(sku.title)}</p>
                 </div>
               </div>`
-            : `<div class="gv-sku"><div class="gv-ph"></div><p>No book match. Tape still prices sold comps.</p></div>`
+            : `<div class="gv-sku"><div class="gv-ph"></div><p>No catalog match. Tape still prices sold comps.</p></div>`
         }
         <div class="gv-card">
           <div class="gv-row">
@@ -225,7 +239,7 @@
           </div>
           ${
             scanMeta.nCliff
-              ? `<p class="gv-note gv-cliff">Stopped at row ${scanMeta.stoppedAt + 1}. ${scanMeta.nCliff} titles no longer matched — noise parked, not priced.</p>`
+              ? `<p class="gv-note gv-cliff">${esc(GV.deskStatusLine("cliffed"))} Stopped at row ${scanMeta.stoppedAt + 1} (${scanMeta.nCliff} miss${scanMeta.nCliff === 1 ? "" : "es"}).</p>`
               : ""
           }
           ${
@@ -233,16 +247,25 @@
               ? `<p class="gv-note">Live/listing asks stay off the sold tape. Fast-Cash only moves after sold comps exist.</p>`
               : ""
           }
-          <p class="gv-kicker" style="margin-top:12px">Fast-Cash <span class="gv-src">${fast != null ? "TAPE" : "NO TAPE"}</span></p>
-          <p class="gv-fast">${GV.money(fast)}</p>
-          ${
-            bookRef != null
-              ? `<p class="gv-id" style="margin-top:4px">Book ref ${GV.money(bookRef)} — catalog, not this page. Do not apply.</p>`
-              : ""
-          }
-          <p class="gv-id" style="margin-top:4px">${kept.length ? matchPct(avg) + " match on this page" : "Nothing scraped yet"}</p>
+          <div class="gv-roles">
+            <div class="gv-role gv-role-tape" data-role="tape">
+              <p class="gv-role-kicker">Fast-Cash <span class="gv-src${fast == null ? " none" : ""}">${esc(tapeChip)}</span></p>
+              <p class="gv-role-value gv-fast">${GV.money(fast)}</p>
+              <p class="gv-role-hint">${esc(tapeHint)}</p>
+            </div>
+            <div class="gv-role gv-role-ask" data-role="ask">
+              <p class="gv-role-kicker">Listed ask</p>
+              <p class="gv-role-value">${listed != null ? GV.money(listed) : "—"}</p>
+              <p class="gv-role-hint">${pageMode === "sold" ? "Sold search — no live ask on this page." : "Live BIN/ask on this page. Never sets Fast-Cash."}</p>
+            </div>
+            <div class="gv-role gv-role-book" data-role="book">
+              <p class="gv-role-kicker">Book ref</p>
+              <p class="gv-role-value">${bookRef != null ? GV.money(bookRef) : "—"}</p>
+              <p class="gv-role-hint">Catalog only — not sold tape. Do not Apply.</p>
+            </div>
+          </div>
+          <p class="gv-id" style="margin-top:8px">${kept.length ? matchPct(avg) + " match on this page" : scraping ? GV.deskStatusLine("watching") : "Nothing scraped yet"}</p>
           <dl class="gv-dl">
-            <div><dt>Listed</dt><dd class="gv-danger">${GV.money(listed)}</dd></div>
             <div><dt>Gap</dt><dd class="gv-danger">${GV.money(gap)}</dd></div>
             <div><dt>Net after fees</dt><dd class="gv-ok">${GV.money(velocity?.netMedian)}</dd></div>
             <div><dt>P25–P75</dt><dd>${GV.money(velocity?.p25)}–${GV.money(velocity?.p75)}</dd></div>
@@ -254,6 +277,11 @@
             ${esc(scrapeLabel())}
           </button>
           <button class="gv-btn ghost" type="button" data-act="sold">Open solds</button>
+          ${
+            canContinueSolds
+              ? `<button class="gv-btn ghost" type="button" data-act="continue-solds"${scraping || followingSoldPage ? " disabled" : ""}>Continue solds</button>`
+              : ""
+          }
           <button class="gv-btn ${pageMode === "listing" ? "primary" : "ghost"}" type="button" data-act="apply"${fast == null ? " disabled" : ""}>
             ${applied != null ? "Applied " + GV.money(applied) : "Apply Fast-Cash"}
           </button>
@@ -335,14 +363,13 @@
       paintSuggests();
       return;
     }
-    try {
-      const res = await chrome.runtime.sendMessage({ type: "GV_SUGGEST", q: typeQuery });
-      if (gen !== typeGen) return;
-      suggests = res?.hits || [];
-    } catch {
-      if (gen !== typeGen) return;
-      suggests = GV.suggestTape(typeQuery, { catalog, tape: soldTape, limit: 8 });
-    }
+    const hits = await GV.suggestLocalFirst(typeQuery, {
+      catalog,
+      tape: soldTape,
+      limit: 8,
+    });
+    if (gen !== typeGen) return;
+    suggests = hits;
     paintSuggests();
   }
 
@@ -422,12 +449,16 @@
       return;
     }
     if (act === "scrape") {
-      await read(true);
+      await read({ force: true, mode: "manual" });
       return;
     }
     if (act === "sold") {
       const q = query || typeQuery;
       if (q) location.href = GV.soldUrl(q);
+      return;
+    }
+    if (act === "continue-solds") {
+      followNextSoldPage("manual");
       return;
     }
     if (act === "copy") {
@@ -456,6 +487,7 @@
       return;
     }
     if (act === "hit") {
+      // Typeahead never opens sold tabs — load retained tape only.
       const q = btn.getAttribute("data-q");
       typeQuery = q;
       suggests = [];
@@ -510,6 +542,34 @@
       .catch(() => {});
   }
 
+  function updateContinueSolds(scan) {
+    const info = GV.soldSearchPage(location.href);
+    const page = info?.page || 1;
+    const nextUrl = pageMode === "sold" ? GV.nextSoldPageUrl(location.href, query) : null;
+    nextSoldHref = nextUrl;
+    canContinueSolds = GV.shouldContinueSoldPages({
+      pageMode,
+      page,
+      nKept: scan?.nKept ?? scanMeta.nKept,
+      nCliff: scan?.nCliff ?? scanMeta.nCliff,
+      nRaw: scan?.nRaw ?? scanMeta.nRaw,
+      nextUrl,
+      maxPages: GV.SOLD_PAGE_CAP,
+    });
+  }
+
+  function followNextSoldPage(reason) {
+    if (!canContinueSolds || !nextSoldHref) return false;
+    if (followingSoldPage) return false;
+    followingSoldPage = true;
+    setStatus(
+      reason === "auto" ? "Auto-following next sold page…" : "Opening next sold page…",
+      4000,
+    );
+    location.href = nextSoldHref;
+    return true;
+  }
+
   async function scrapeListings() {
     let listings = GV.scrapeEbay(document);
     if (!listings.length && (GV.isSearchPage() || GV.isSoldSearch() || GV.isListingOrRevise())) {
@@ -519,7 +579,13 @@
     return listings;
   }
 
-  async function read(force = false) {
+  async function read(opts = false) {
+    const options =
+      opts && typeof opts === "object"
+        ? { force: Boolean(opts.force), mode: opts.mode === "manual" ? "manual" : "auto" }
+        : { force: Boolean(opts), mode: opts ? "manual" : "auto" };
+    const force = options.force;
+    const captureMode = options.mode;
     const gen = (readGen += 1);
     scraping = true;
     const prevQ = query;
@@ -529,10 +595,14 @@
     typeQuery = typeQuery || query;
     render();
     try {
-      const cached = await chrome.runtime.sendMessage({ type: "GV_TAPE_GET", query }).catch(() => null);
+      // Tape lookup (may cold-hydrate from the Tape API) and the DOM scrape are
+      // independent: start both, then apply in the original order.
+      const cachedP = chrome.runtime.sendMessage({ type: "GV_TAPE_GET", query }).catch(() => null);
+      const listingsP = scrapeListings();
+      const cached = await cachedP;
       if (gen !== readGen) return;
       if (cached?.snapshot?.comps?.length) applySoldTape(cached.snapshot);
-      const listings = await scrapeListings();
+      const listings = await listingsP;
       if (gen !== readGen) return;
       const result = GV.verifyComps(query, listings);
       scanMeta = {
@@ -540,6 +610,8 @@
         nCliff: result.nCliff,
         nRaw: result.nRaw,
         nKept: result.nKept,
+        mode: captureMode,
+        pageMode,
       };
       pageRows = GV.preserveKeepToggles(result.rows, prevKeep, query === prevQ);
       sku = GV.matchSku(catalog, query);
@@ -560,6 +632,10 @@
             verified: result,
             velocity,
             url: location.href,
+            mode: captureMode,
+            pageMode,
+            stoppedAt: result.stoppedAt,
+            nCliff: result.nCliff,
           });
           if (gen !== readGen) return;
           if (put?.snapshot) applySoldTape(put.snapshot);
@@ -569,10 +645,24 @@
         }
       }
       if (gen !== readGen) return;
+      updateContinueSolds(result);
       const next = sigNow();
-      if (!force && next === lastSig) return;
-      lastSig = next;
-      writeLastRead();
+      if (!force && next === lastSig) {
+        /* still allow sold pagination after identical sig */
+      } else {
+        lastSig = next;
+        writeLastRead();
+      }
+      // Auto-follow next sold page only on sold-search, never from typeahead.
+      if (
+        captureMode === "auto" &&
+        GV.shouldScheduleAutoRead(autoCapture) &&
+        canContinueSolds &&
+        nextSoldHref
+      ) {
+        followNextSoldPage("auto");
+        return;
+      }
     } finally {
       if (gen === readGen) {
         scraping = false;
@@ -598,9 +688,11 @@
   }
 
   function scheduleRead() {
+    if (!GV.shouldScheduleAutoRead(autoCapture)) return;
     if (observeTimer) clearTimeout(observeTimer);
     observeTimer = setTimeout(() => {
-      if (shouldWatchPage()) read(false);
+      if (!GV.shouldScheduleAutoRead(autoCapture)) return;
+      if (shouldWatchPage()) read({ force: false, mode: "auto" });
     }, 450);
   }
 
@@ -618,10 +710,16 @@
       velocity = null;
       applied = null;
       lastSig = "";
+      canContinueSolds = false;
+      nextSoldHref = null;
+      followingSoldPage = false;
       scanMeta = { stoppedAt: null, nCliff: 0, nRaw: 0, nKept: 0 };
       render();
-      if (GV.isSoldSearch() || GV.isSearchPage() || GV.isListingOrRevise()) {
-        read(true);
+      if (
+        GV.shouldScheduleAutoRead(autoCapture) &&
+        (GV.isSoldSearch() || GV.isSearchPage() || GV.isListingOrRevise())
+      ) {
+        read({ force: true, mode: "auto" });
       } else if (query) {
         loadSnapshot(query);
       }
@@ -631,12 +729,12 @@
   chrome.runtime.onMessage.addListener((msg, _s, send) => {
     if (msg?.type === "GV_TOGGLE") {
       setOpen(!open);
-      if (open) read(true);
+      if (open) read({ force: true, mode: "manual" });
       send({ open });
     }
     if (msg?.type === "GV_READ") {
       setOpen(true);
-      read(true);
+      read({ force: true, mode: "manual" });
       send({ query, n: pageRows.length, action: velocity?.action });
     }
     return true;
@@ -648,12 +746,26 @@
       if (!GV.isOverlayToggleHotkey(e)) return;
       e.preventDefault();
       setOpen(!open);
-      if (open) read(true);
+      if (open) read({ force: true, mode: "manual" });
     },
     true,
   );
 
   await Promise.all([loadCatalog(), loadPrefs()]);
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area !== "local") return;
+    if (changes.autoCapture) {
+      autoCapture = GV.autoCaptureEnabled(changes.autoCapture.newValue);
+      if (!GV.shouldScheduleAutoRead(autoCapture) && observeTimer) {
+        clearTimeout(observeTimer);
+        observeTimer = null;
+      }
+    }
+    if (changes.tapeSync) {
+      tapeSync = changes.tapeSync.newValue || null;
+      if (open) render();
+    }
+  });
   pageMode = GV.pageMode();
   query = GV.pageQuery();
   typeQuery = query;
@@ -664,8 +776,11 @@
     scheduleRead();
   });
   mo.observe(document.documentElement, { childList: true, subtree: true });
-  if (GV.isSoldSearch() || GV.isSearchPage() || GV.isListingOrRevise()) {
-    await read(true);
+  if (
+    GV.shouldScheduleAutoRead(autoCapture) &&
+    (GV.isSoldSearch() || GV.isSearchPage() || GV.isListingOrRevise())
+  ) {
+    await read({ force: true, mode: "auto" });
   } else if (query) {
     await loadSnapshot(query);
   }

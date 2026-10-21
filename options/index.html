@@ -16,6 +16,8 @@
       <h2>Capture</h2>
       <label class="switch"><input id="capture-on" type="checkbox" /> Capture on</label>
       <label class="switch"><input id="site-ebay" type="checkbox" /> eBay</label>
+      <label class="switch"><input id="autoCapture" type="checkbox" checked /> Auto-capture on sold / search / listing</label>
+      <p class="help">Default on (same as today). When off, MutationObserver and SPA location auto-reads stop; <strong>Scrape this page</strong> still works.</p>
       <label class="field" for="pause-list">Pause list</label>
       <textarea id="pause-list" spellcheck="false" aria-describedby="pause-help"></textarea>
       <p id="pause-help" class="help">One URL fragment per line, at least 6 characters. Whole-site ebay.com is rejected.</p>
@@ -24,7 +26,7 @@
       <label class="field" for="seller-secret">Seller HMAC secret</label>
       <input id="seller-secret" type="text" autocomplete="off" spellcheck="false" />
       <h2>Tape server</h2>
-      <p class="help">Optional. <code>npm run tape</code> prints the shared secret. Verified solds can sit in Postgres. The queue still lands in SQLite when Postgres is down.</p>
+      <p class="help">Optional. Postgres for verified prices, SQLite for junk; the queue still lands in SQLite when Postgres is down. Tape API stays <code>http://127.0.0.1:8787</code> for <code>npm run tape</code> (it prints the shared secret), or <code>https://tape-production-2810.up.railway.app</code>. Other hosts are refused. The shared secret has to match either way.</p>
       <label class="field" for="tapeApi">Tape API</label>
       <input id="tapeApi" type="url" placeholder="http://127.0.0.1:8787" autocomplete="off" />
       <label class="field" for="tapeSecret">Shared secret</label>
@@ -38,6 +40,17 @@
         <button type="button" class="ghost" id="check">Check connection</button>
         <button id="save" type="submit">Save</button>
       </div>
+      <p id="syncStatus" class="help sync" aria-live="polite">Last push: —</p>
+      <label class="field" for="pullQuery">Pull / inspect query</label>
+      <input id="pullQuery" type="text" placeholder="e.g. 2023-24 Topps Mercury … #5 Refractor 74/99" autocomplete="off" spellcheck="false" />
+      <p class="help">Cold Chrome / cleared storage: pull verified solds for one query from Postgres into local tape. Scratch and live asks stay out of Fast-Cash.</p>
+      <button type="button" class="ghost" id="pull">Pull from server</button>
+      <p class="help">Scratch inspector: last parked reasons for this query (cliff / weak_title / active ask). Local Chrome tape first; optional server read is SQLite only (7d TTL) and never feeds Fast-Cash.</p>
+      <div class="row">
+        <button type="button" class="ghost" id="scratchLocal">Inspect local scratch</button>
+        <button type="button" class="ghost" id="scratchRemote">Inspect server scratch</button>
+      </div>
+      <ul id="scratchList" class="scratch-list" aria-live="polite"></ul>
       <p id="status" role="status"></p>
     </form>
     <script src="../lib/core.js"></script>

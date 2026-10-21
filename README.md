@@ -4,13 +4,16 @@ Chromium MV3 overlay. Reads eBay sold tape as you. Fast-Cash is **sold tape only
 
 ## Status
 
-**v2.0.0**
+**v2.0.2** — hosted Tape URL (`https://tape-production-2810.up.railway.app`). Capture and comps stay as in 2.0.1 (see Performance). Page-view capture (`POST /observe`) is described below.
 
 - Auto-capture once per page view on item (`/itm/`), sold search (`LH_Sold=1`), and active search. It does not crawl, paginate, or open tabs.
 - One parser per page type. Seller names are stored only as HMAC-SHA256 with a secret you set in Options.
 - Popup: global capture, eBay toggle, pause list, pause 1 hour, today's count, queue, server status, quick comp lookup.
 - Limits: 1 capture per URL per 10 minutes, 300 captures per hour. The outbox is IndexedDB. `POST /observe` writes Postgres when `DATABASE_URL` is set and SQLite when it is not.
 - Fast-Cash chip says **TAPE** or **NO TAPE**. Catalog book price is labeled Book ref and cannot be Applied.
+- Auto-capture (preference-gated) + capture meta; Continue solds pagination on sold search only.
+- Local-first typeahead; optional Tape API suggest fallback + Postgres pull/hydrate.
+- Scratch inspector (Options + `GET /scratch`); chrome.storage snapshot prune; Postgres `schema_migrations`.
 - Scrape any eBay tab. Live BIN/asks never write Fast-Cash.
 - High-match keep (72%+). Cliff after 3 consecutive misses.
 - Optional tape server (Postgres + SQLite). Extension works without it.
@@ -38,9 +41,9 @@ Capture only pages the user personally views. The extension does not crawl, sche
 | Field | Source |
 |---|---|
 | Fast-Cash **TAPE** | P25 × 0.98 of verified **sold** comps on/cached for this query |
-| Fast-Cash **NO TAPE** | No price. Open solds and scrape. |
-| Book ref | Stale catalog ask from `catalog.json`. Display only. |
-| Listed | Live ask on this page. Empty on sold search. Catalog BIN is Book ref only. |
+| Fast-Cash **NO TAPE** | No price. Desk says: open solds or wait for auto-capture. |
+| Book ref | Catalog ask from `catalog.json`. Display only — never Apply. |
+| Listed ask | Live BIN/ask on this page. Empty on sold search. Never sets Fast-Cash. |
 | kept / dropped | Title identity vs the search (set, #, print run, player) |
 
 Need 2 tight (85%+) or 3 verified solds. One cheap near-miss cannot pull the tape.
@@ -67,3 +70,21 @@ python3 scripts/load_mascot.py
 ```
 
 CardSight writes cards, comps (`source=cardsight`), and sku mappings. The Mascot script only reads a SKU-mapping CSV.
+
+Hosted Tape is `https://tape-production-2810.up.railway.app` only. The extension will not send the shared secret to any other `up.railway.app` host. Loopback is unchanged. `TAPE_SECRET` is the Railway variable on service `tape` (dashboard; the process does not print it). `DATABASE_URL` stays on the service, not in the extension.
+
+## Performance (2.0.1)
+
+- Capture answers the overlay as soon as Chrome tape is written; `POST /tape` goes through a persisted
+  outbox (`tapeOutbox`, FIFO, retry with backoff, flushed on worker start).
+- Service worker serves hot `chrome.storage` keys from memory (refreshed via `storage.onChanged`).
+- Remote calls have deadlines (suggest 1.2s, pull 2.5s); remote suggest hits are memoized 20s.
+- Overlay starts the tape lookup and the DOM scrape in parallel.
+- Server: SQLite WAL + one transaction per write; Postgres migrations once per process, snapshot +
+  verified solds in one transaction with a single `unnest` batch upsert, parallel `/tape` reads,
+  migration v2 indexes (prefix, `updated_at`, `(query_norm, seen_at)`, optional `pg_trgm`), gzip ≥1KB,
+  keep-alive.
+
+Bench (local, no eBay traffic): `node bench/latency.js` (add `DATABASE_URL=…` for Postgres — it
+**truncates** the tape tables, so point it at a scratch DB; `BENCH_RTT_MS=80` models a remote server).
+`TEST_DATABASE_URL=… npm test` also runs the live Postgres test.

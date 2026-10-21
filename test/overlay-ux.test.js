@@ -167,25 +167,157 @@ test("queueCopyText ranks by list-to-tape gap and caps at 40", () => {
   assert.match(lines[2], /^low\t/);
 });
 
+test("captureStatus is watching, scraped, or cliffed", () => {
+  assert.equal(GV.captureStatus({ scraping: true }), "watching");
+  assert.equal(GV.captureStatus({}), "watching");
+  assert.equal(GV.captureStatus({ nRaw: 0, pageRows: [], soldTape: [] }), "watching");
+  assert.equal(GV.captureStatus({ nRaw: 3, nCliff: 0, pageRows: [{ id: "a" }] }), "scraped");
+  assert.equal(GV.captureStatus({ nRaw: 5, nCliff: 2 }), "cliffed");
+  assert.equal(GV.captureStatus({ scraping: true, nCliff: 2 }), "watching");
+});
+
+test("desk empty states align watching / NO TAPE / cliff copy", () => {
+  assert.equal(GV.deskStatusLine("watching"), "watching solds…");
+  assert.equal(GV.deskStatusLine("cliffed"), "cliff — junk parked in scratch");
+  assert.equal(GV.deskStatusLine("scraped"), "scraped");
+  assert.equal(GV.deskStatusLine({ scraping: true }), "watching solds…");
+  assert.equal(GV.deskStatusLine({ nCliff: 2 }), "cliff — junk parked in scratch");
+  assert.equal(GV.deskNoTapeLine(), "NO TAPE — open solds or wait for auto-capture");
+  assert.equal(GV.DESK_EMPTY.watching, "watching solds…");
+  assert.equal(GV.DESK_EMPTY.noTape, "NO TAPE — open solds or wait for auto-capture");
+  assert.equal(GV.DESK_EMPTY.cliff, "cliff — junk parked in scratch");
+});
+
+test("formatTapeSync surfaces OK / fail / idle for Options and overlay", () => {
+  const now = 1_000_000;
+  const idle = GV.formatTapeSync(null, now);
+  assert.equal(idle.kind, "idle");
+  assert.equal(idle.label, "sync —");
+  assert.match(idle.detail, /No Tape API push/);
+  const ok = GV.formatTapeSync({ ok: true, at: now - 30_000 }, now);
+  assert.equal(ok.kind, "ok");
+  assert.match(ok.label, /sync OK/);
+  const bad = GV.formatTapeSync({ ok: false, error: "ECONNREFUSED", at: now - 120_000 }, now);
+  assert.equal(bad.kind, "bad");
+  assert.match(bad.label, /sync fail/);
+  assert.match(bad.detail, /ECONNREFUSED/);
+});
+
+test("autoCapture defaults ON; pref off ⇒ no scheduled auto-read", () => {
+  assert.equal(GV.autoCaptureEnabled(undefined), true);
+  assert.equal(GV.autoCaptureEnabled(null), true);
+  assert.equal(GV.autoCaptureEnabled(true), true);
+  assert.equal(GV.autoCaptureEnabled(false), false);
+  assert.equal(GV.shouldScheduleAutoRead(true), true);
+  assert.equal(GV.shouldScheduleAutoRead(undefined), true);
+  assert.equal(GV.shouldScheduleAutoRead(false), false);
+});
+
+test("scratchReasons buckets cliff / weak_title / active ask", () => {
+  assert.equal(GV.scratchBucket({ flags: ["beyond_cliff"], reason: "Past eBay relevance cliff" }), "cliff");
+  assert.equal(GV.scratchBucket({ flags: ["weak_title"], reason: "weak_title" }), "weak_title");
+  assert.equal(GV.scratchBucket({ kind: "active", keep: true, flags: [] }), "active");
+  assert.equal(GV.scratchBucket({ flags: ["wrong_set"], reason: "wrong_set" }), "wrong_set");
+
+  const reasons = GV.scratchReasons(
+    {
+      entries: [
+        {
+          at: 200,
+          listings: [
+            { id: "a", title: "live ask", price: 150, kind: "active", keep: true, flags: [] },
+            { id: "b", title: "near miss", price: 40, flags: ["weak_title"], reason: "weak_title" },
+          ],
+        },
+        {
+          at: 100,
+          listings: [
+            { id: "c", title: "junk after cliff", price: 3, flags: ["beyond_cliff"], reason: "Past eBay relevance cliff" },
+          ],
+        },
+      ],
+    },
+    { limit: 10 },
+  );
+  assert.equal(reasons.length, 3);
+  assert.equal(reasons[0].bucket, "active");
+  assert.equal(reasons[1].bucket, "weak_title");
+  assert.equal(reasons[2].bucket, "cliff");
+  assert.match(reasons[0].label, /active:/);
+  assert.equal(GV.scratchReasons({ listings: [] }, { limit: 5 }).length, 0);
+});
+
 test("content script and side panel call extracted overlay helpers", () => {
   const ebay = fs.readFileSync(path.join(__dirname, "../content/ebay.js"), "utf8");
   const demo = fs.readFileSync(path.join(__dirname, "../test/overlay-demo.html"), "utf8");
   const panel = fs.readFileSync(path.join(__dirname, "../sidepanel/sidepanel.js"), "utf8");
+  const optsHtml = fs.readFileSync(path.join(__dirname, "../options/index.html"), "utf8");
+  const optsJs = fs.readFileSync(path.join(__dirname, "../options/options.js"), "utf8");
   const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, "../manifest.json"), "utf8"));
   assert.match(ebay, /GV\.findingsText\(/);
   assert.match(ebay, /GV\.pageChanged\(/);
   assert.match(ebay, /GV\.isOverlayToggleHotkey\(/);
   assert.match(ebay, /GV\.preserveKeepToggles\(/);
   assert.match(ebay, /GV\.lastReadPayload\(/);
+  assert.match(ebay, /GV\.captureStatus\(/);
+  assert.match(ebay, /GV\.deskStatusLine\(/);
+  assert.match(ebay, /GV\.deskNoTapeLine\(/);
+  assert.match(ebay, /GV\.formatTapeSync\(/);
+  assert.match(ebay, /data-capture-status/);
+  assert.match(ebay, /data-tape-sync/);
+  assert.match(ebay, /data-role="tape"/);
+  assert.match(ebay, /data-role="ask"/);
+  assert.match(ebay, /data-role="book"/);
+  assert.match(ebay, /mode:\s*"manual"/);
+  assert.match(ebay, /mode:\s*"auto"/);
+  assert.match(ebay, /GV\.shouldScheduleAutoRead\(autoCapture\)/);
+  assert.match(ebay, /GV\.autoCaptureEnabled\(/);
+  assert.match(ebay, /chrome\.storage\.onChanged/);
+  assert.match(ebay, /changes\.tapeSync/);
+  assert.match(ebay, /function scheduleRead\(\) \{\s*\n\s*if \(!GV\.shouldScheduleAutoRead\(autoCapture\)\) return;/);
+  assert.match(optsHtml, /id="autoCapture"/);
+  assert.match(optsJs, /autoCapture/);
+  assert.match(optsHtml, /id="pull"/);
+  assert.match(optsHtml, /id="pullQuery"/);
+  assert.match(optsJs, /GV_TAPE_PULL/);
+  assert.match(optsHtml, /id="scratchLocal"/);
+  assert.match(optsHtml, /id="scratchRemote"/);
+  assert.match(optsHtml, /id="scratchList"/);
+  assert.match(optsHtml, /id="syncStatus"/);
+  assert.match(optsJs, /GV_SCRATCH_GET/);
+  assert.match(optsJs, /GV_SCRATCH_REMOTE/);
+  assert.match(optsJs, /GV\.scratchReasons\(/);
+  assert.match(optsJs, /GV\.formatTapeSync\(/);
+  assert.match(optsJs, /paintSync/);
   assert.match(panel, /GV\.formatLastRead\(/);
   assert.match(panel, /GV\.queueCopyText\(/);
+  const panelHtml = fs.readFileSync(path.join(__dirname, "../sidepanel/index.html"), "utf8");
+  assert.match(panelHtml, /Side panel · cut queue/);
+  assert.equal(/Side panel · book/.test(panelHtml), false);
+  assert.match(panelHtml, /Fast-Cash is sold tape only/);
+  const overlayCss = fs.readFileSync(path.join(__dirname, "../content/overlay.css"), "utf8");
+  assert.match(overlayCss, /\.gv-role-tape/);
+  assert.match(overlayCss, /\.gv-role-ask/);
+  assert.match(overlayCss, /\.gv-role-book/);
+  assert.match(overlayCss, /\.gv-sync/);
   assert.match(ebay, /GV\.listedAsk\(/);
   assert.match(ebay, /GV\.mergeKeepIntoSoldTape\(/);
   assert.match(ebay, /soldTape = \[\]/);
   assert.match(ebay, /readGen/);
+  assert.match(ebay, /data-act="continue-solds"/);
+  assert.match(ebay, /GV\.shouldContinueSoldPages\(/);
+  assert.match(ebay, /GV\.nextSoldPageUrl\(/);
+  assert.match(ebay, /followNextSoldPage/);
+  assert.match(ebay, /Typeahead never opens sold tabs/);
+  {
+    const hitBlock = ebay.match(/if \(act === "hit"\) \{[\s\S]*?\n    \}/);
+    assert.ok(hitBlock, "hit handler present");
+    assert.equal(/soldUrl|tabs\.create|location\.href/.test(hitBlock[0]), false);
+  }
   assert.deepEqual(manifest.content_scripts[0].js, [
     "lib/core.js",
     "lib/overlay.js",
+    "lib/suggest.js",
     "lib/cardfields.js",
     "lib/observe.js",
     "content/parsers/common.js",
@@ -197,4 +329,6 @@ test("content script and side panel call extracted overlay helpers", () => {
     "content/ebay.js",
   ]);
   assert.match(demo, /lib\/overlay\.js/);
+  assert.match(ebay, /GV\.loadCatalog\(/);
+  assert.match(ebay, /GV\.suggestLocalFirst\(/);
 });

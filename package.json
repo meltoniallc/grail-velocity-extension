@@ -1,12 +1,13 @@
 {
   "name": "grail-velocity-extension",
-  "version": "2.0.0",
+  "version": "2.0.2",
   "private": true,
   "engines": {
     "node": ">=22.5.0"
   },
   "scripts": {
     "test": "node --test test/*.test.js",
+    "start": "node server/index.js",
     "tape": "node server/index.js",
     "package": "node scripts/package.js"
   },
