@@ -8,7 +8,7 @@ const path = require("node:path");
 const { spawn } = require("node:child_process");
 const { DatabaseSync } = require("node:sqlite");
 const { loadScripts } = require("./load-core");
-const { applyMigrations } = require("../server/migrate");
+const { PG_MIGRATIONS, schemaMigrationsDdl, ensurePostgresMigrations } = require("../server/store");
 
 const { GVObserve } = loadScripts(["lib/observe.js"]);
 
@@ -29,37 +29,70 @@ function waitPort(child) {
   });
 }
 
-function fakePool(vector) {
+const ROOT = path.join(__dirname, "..");
+
+function walk(dir, out = []) {
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    if (["node_modules", ".git", "dist", "data"].includes(entry.name)) continue;
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) walk(full, out);
+    else if (/\.(js|sql|py)$/.test(entry.name)) out.push(full);
+  }
+  return out;
+}
+
+test("observe tables live in the single store.js migration list as v3 and v4", async () => {
+  const versions = PG_MIGRATIONS.map((m) => m.version);
+  assert.deepEqual(versions, [1, 2, 3, 4]);
+  for (const mig of PG_MIGRATIONS) assert.ok(mig.name && typeof mig.name === "string");
+  const v3 = PG_MIGRATIONS.find((m) => m.version === 3).sql;
+  for (const table of ["cards", "observations", "comps", "sku_mappings"]) {
+    assert.match(v3, new RegExp(`CREATE TABLE IF NOT EXISTS ${table} \\(`));
+  }
+  assert.match(v3, /CREATE INDEX IF NOT EXISTS observations_item_idx/);
+  const v4 = PG_MIGRATIONS.find((m) => m.version === 4).sql;
+  assert.match(v4, /vector\(1536\)/);
+  assert.match(v4, /EXCEPTION WHEN OTHERS/, "pgvector is optional");
+  assert.match(v4, /CREATE TABLE IF NOT EXISTS embeddings/);
+  // Every CREATE in the folded SQL is idempotent.
+  for (const mig of PG_MIGRATIONS.slice(2)) {
+    assert.doesNotMatch(mig.sql, /CREATE (TABLE|INDEX|EXTENSION) (?!IF NOT EXISTS)/);
+  }
+  // The tracker is INT-versioned with a name, and only store.js creates it.
+  assert.match(schemaMigrationsDdl(), /version INT PRIMARY KEY/);
+  assert.doesNotMatch(schemaMigrationsDdl(), /version TEXT/);
+  const creators = walk(ROOT)
+    .filter((file) => !file.includes(`${path.sep}test${path.sep}`))
+    .filter((file) => /CREATE TABLE (IF NOT EXISTS )?schema_migrations/i.test(fs.readFileSync(file, "utf8")))
+    .map((file) => path.relative(ROOT, file));
+  assert.deepEqual(creators, [path.join("server", "store.js")]);
+  assert.equal(fs.existsSync(path.join(ROOT, "server", "migrate.js")), false);
+  assert.match(fs.readFileSync(path.join(ROOT, "server", "observe.js"), "utf8"), /ensurePostgresMigrations\(pool\)/);
+});
+
+test("ensurePostgresMigrations applies v3 observe tables through the shared tracker", async () => {
+  const applied = new Set();
   const queries = [];
-  return {
-    queries,
+  const pool = {
     async query(text, params) {
-      queries.push({ text, params });
-      if (String(text).includes("pg_available_extensions")) {
-        return { rows: vector ? [{ ok: 1 }] : [] };
+      queries.push(String(text));
+      if (/SELECT version FROM schema_migrations/i.test(text)) {
+        return { rows: [...applied].map((version) => ({ version })) };
       }
-      if (String(text).includes("SELECT version FROM schema_migrations")) return { rows: [] };
+      if (/INSERT INTO schema_migrations/i.test(text)) {
+        assert.equal(typeof params[0], "number");
+        assert.ok(params[1], "name recorded");
+        applied.add(params[0]);
+      }
       return { rows: [], rowCount: 1 };
     },
   };
-}
-
-test("migrations create the card tables and skip embeddings without pgvector", async () => {
-  const plain = fakePool(false);
-  const skipped = await applyMigrations(plain);
-  const sql = plain.queries.map((query) => query.text).join("\n");
+  const result = await ensurePostgresMigrations(pool);
+  assert.deepEqual(result.applied, [1, 2, 3, 4]);
+  assert.equal(result.latest, 4);
+  const sql = queries.join("\n");
   assert.match(sql, /CREATE TABLE IF NOT EXISTS observations/);
-  assert.match(sql, /CREATE TABLE IF NOT EXISTS cards/);
-  assert.match(sql, /CREATE TABLE IF NOT EXISTS comps/);
-  assert.match(sql, /CREATE TABLE IF NOT EXISTS sku_mappings/);
-  assert.equal(sql.includes("vector(1536)"), false);
-  assert.ok(skipped.skipped.some((name) => name.startsWith("002")));
-
-  const withVector = fakePool(true);
-  const applied = await applyMigrations(withVector);
-  const vectorSql = withVector.queries.map((query) => query.text).join("\n");
-  assert.match(vectorSql, /vector\(1536\)/);
-  assert.ok(applied.applied.some((name) => name.startsWith("002")));
+  assert.match(sql, /schema_migrations_legacy_text/);
 });
 
 test("POST /observe dedupes in sqlite and leaves tape routes alone", async () => {

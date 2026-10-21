@@ -3,7 +3,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const { createHash } = require("node:crypto");
-const { applyMigrations } = require("./migrate");
+const { ensurePostgresMigrations } = require("./store");
 
 const SQLITE_SCHEMA = fs.readFileSync(path.join(__dirname, "..", "db", "sqlite", "001_observe.sql"), "utf8");
 
@@ -155,13 +155,9 @@ function ingestSqlite(db, rows) {
   return summary;
 }
 
-let migrated = false;
-
 async function upsertPostgres(pool, rows) {
-  if (!migrated) {
-    await applyMigrations(pool);
-    migrated = true;
-  }
+  // Same runner as server startup and /tape (memoized per pool): v3 owns observations.
+  await ensurePostgresMigrations(pool);
   let inserted = 0;
   let duplicates = 0;
   const placeholders = COLS.map((col, i) => (col === "specifics" ? `$${i + 1}::jsonb` : `$${i + 1}`)).join(", ");

@@ -57,7 +57,7 @@ DATABASE_URL=postgres://… TAPE_SECRET=$(openssl rand -hex 32) SQLITE_PATH=./da
 
 Options → Tape API `http://127.0.0.1:8787` + the printed secret. Skip this unless you want Postgres retention.
 
-`POST /observe` accepts batches from the extension. Existing `GET /health`, `GET /ping`, `GET /suggest`, and `POST /tape` stay. Numbered SQL lives in `db/migrations`. The embeddings table is applied only when pgvector is installed.
+`POST /observe` accepts batches from the extension. Existing `GET /health`, `GET /ping`, `GET /suggest`, and `POST /tape` stay. Postgres tables for capture are migrations v3 (`cards`, `observations`, `comps`, `sku_mappings`) and v4 (`embeddings`, only when pgvector can be enabled) in the same `schema_migrations` list in `server/store.js` that runs at server start.
 
 ## Loaders
 
