@@ -1,4 +1,4 @@
-Grail Velocity v2.0.2 — Fast-Cash is sold tape only. Capture records pages you personally view.
+Grail Velocity v2.0.3 — Fast-Cash is sold tape only. Capture records pages you personally view.
 
 Build (from repo root):
   npm run package

@@ -4,7 +4,7 @@ Chromium MV3 overlay. Reads eBay sold tape as you. Fast-Cash is **sold tape only
 
 ## Status
 
-**v2.0.2** — hosted Tape URL (`https://tape-production-2810.up.railway.app`). Capture and comps stay as in 2.0.1 (see Performance). Page-view capture (`POST /observe`) is described below.
+**v2.0.3** — Options **Use Railway Tape** preset (`https://tape-production-2810.up.railway.app`), desk SYNC FAIL banner, cliff → Inspect scratch. Invariants unchanged (Fast-Cash/Postgres = verified solds; live → scratch; typeahead never opens sold tabs).
 
 - Auto-capture once per page view on item (`/itm/`), sold search (`LH_Sold=1`), and active search. It does not crawl, paginate, or open tabs.
 - One parser per page type. Seller names are stored only as HMAC-SHA256 with a secret you set in Options.
@@ -71,7 +71,7 @@ python3 scripts/load_mascot.py
 
 CardSight writes cards, comps (`source=cardsight`), and sku mappings. The Mascot script only reads a SKU-mapping CSV.
 
-Hosted Tape is `https://tape-production-2810.up.railway.app` only. The extension will not send the shared secret to any other `up.railway.app` host. Loopback is unchanged. `TAPE_SECRET` is the Railway variable on service `tape` (dashboard; the process does not print it). `DATABASE_URL` stays on the service, not in the extension.
+Hosted Tape is `https://tape-production-2810.up.railway.app` only. Options → **Use Railway Tape** fills that URL (paste `TAPE_SECRET` from the Railway `tape` service). **Use local Tape** fills `http://127.0.0.1:8787`. The extension will not send the shared secret to any other host. `TAPE_SECRET` is not printed by the Railway process. `DATABASE_URL` stays on the service, not in the extension.
 
 ## Performance (2.0.1)
 

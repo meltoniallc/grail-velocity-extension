@@ -191,6 +191,7 @@
           ? matchPct(avg) + " match on this page"
           : "Sold comps only — Apply uses this price."
         : GV.deskNoTapeLine();
+    const cliffed = captureKey === "cliffed" || (scanMeta.nCliff || 0) > 0;
     wrap.innerHTML = `
       <div class="gv-head">
         <div>
@@ -200,6 +201,11 @@
         </div>
         <button class="gv-x" type="button" data-act="close" aria-label="Hide">×</button>
       </div>
+      ${
+        syncInfo.kind === "bad" && syncInfo.banner
+          ? `<p class="gv-sync-banner" role="alert" data-tape-sync="bad">${esc(syncInfo.banner)}</p>`
+          : ""
+      }
       <div class="gv-body">
         <form class="gv-type" data-act="type-form">
           <input id="gv-q" type="search" placeholder="Type a card — tape answers as you go" value="${esc(typeQuery)}" autocomplete="off" />
@@ -238,8 +244,12 @@
             <span class="gv-id">${kept.length} on page · ${soldTape.filter((row) => row.keep).length} sold</span>
           </div>
           ${
-            scanMeta.nCliff
-              ? `<p class="gv-note gv-cliff">${esc(GV.deskStatusLine("cliffed"))} Stopped at row ${scanMeta.stoppedAt + 1} (${scanMeta.nCliff} miss${scanMeta.nCliff === 1 ? "" : "es"}).</p>`
+            cliffed
+              ? `<p class="gv-note gv-cliff">${esc(GV.deskStatusLine("cliffed"))}${
+                  scanMeta.nCliff
+                    ? ` Stopped at row ${scanMeta.stoppedAt + 1} (${scanMeta.nCliff} miss${scanMeta.nCliff === 1 ? "" : "es"}).`
+                    : ""
+                } <button type="button" class="gv-link" data-act="scratch">Inspect scratch</button></p>`
               : ""
           }
           ${
@@ -348,7 +358,7 @@
         (hit) => `<li>
           <button type="button" data-act="hit" data-q="${esc(hit.query || hit.title)}" data-kind="${esc(hit.kind)}">
             <span>${esc(hit.title)}</span>
-            <span class="gv-price">${hit.kind === "tape" ? GV.money(hit.fastCash) : "book"}</span>
+            <span class="gv-price">${hit.kind === "tape" ? GV.money(hit.fastCash) : "catalog"}</span>
           </button>
         </li>`,
       )
@@ -484,6 +494,13 @@
     if (act === "noise") {
       showDropped = !showDropped;
       render();
+      return;
+    }
+    if (act === "scratch") {
+      const q = query || typeQuery || "";
+      await chrome.storage.local.set({ optionsFocus: GV.optionsScratchFocus(q) });
+      chrome.runtime.openOptionsPage();
+      setStatus(q ? `Opening Options scratch for “${q.slice(0, 48)}${q.length > 48 ? "…" : ""}”.` : "Opening Options scratch inspector.");
       return;
     }
     if (act === "hit") {
