@@ -22,6 +22,14 @@ function npmCommand() {
   return globalThis.GV.npmTapeCommand(secretValue());
 }
 
+function pauseLines() {
+  return document
+    .getElementById("pause-list")
+    .value.split(/\n+/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+}
+
 function paintSync(sync) {
   const el = document.getElementById("syncStatus");
   if (!el || !globalThis.GV?.formatTapeSync) return;
@@ -34,11 +42,31 @@ function paintSync(sync) {
 }
 
 async function load() {
-  const data = await chrome.storage.local.get(["tapeApi", "tapeSecret", "autoCapture", "tapeSync"]);
+  const data = await chrome.storage.local.get(["tapeApi", "tapeSecret", "captureSettings", "autoCapture", "tapeSync"]);
   document.getElementById("tapeApi").value = data.tapeApi || "http://127.0.0.1:8787";
   document.getElementById("tapeSecret").value = data.tapeSecret || "";
   document.getElementById("autoCapture").checked = globalThis.GV.autoCaptureEnabled(data.autoCapture);
   paintSync(data.tapeSync);
+  const prefs = data.captureSettings || {};
+  document.getElementById("capture-on").checked = prefs.captureEnabled !== false;
+  document.getElementById("site-ebay").checked = !prefs.sites || prefs.sites.ebay !== false;
+  const patterns = Array.isArray(prefs.pausePatterns) ? prefs.pausePatterns : globalThis.GVObserve.DEFAULT_PAUSE_PATTERNS;
+  document.getElementById("pause-list").value = patterns.join("\n");
+  document.getElementById("seller-secret").value = prefs.sellerHmacSecret || "";
+  document.getElementById("own-seller").value = prefs.ownSellerId || "";
+}
+
+async function saveCapture() {
+  return chrome.runtime.sendMessage({
+    type: "GV_CAPTURE_SETTINGS",
+    patch: {
+      captureEnabled: document.getElementById("capture-on").checked,
+      sites: { ebay: document.getElementById("site-ebay").checked },
+      pausePatterns: pauseLines(),
+      sellerHmacSecret: document.getElementById("seller-secret").value.trim(),
+      ownSellerId: document.getElementById("own-seller").value.trim(),
+    },
+  });
 }
 
 async function save() {
@@ -53,6 +81,7 @@ async function save() {
   const tapeSecret = secretValue();
   const autoCapture = document.getElementById("autoCapture").checked;
   await chrome.storage.local.set({ tapeApi, tapeSecret, autoCapture });
+  await saveCapture();
   return true;
 }
 
@@ -65,7 +94,7 @@ document.getElementById("opts").addEventListener("submit", async (e) => {
 document.getElementById("mint").addEventListener("click", async () => {
   document.getElementById("tapeSecret").value = mintSecret();
   if (!(await save())) return;
-  setStatus("New secret saved here. Copy the npm command, stop the old server, and start it with that command so both sides match.", "ok");
+  setStatus("New tape secret saved here. Copy the npm command and restart the server so both sides match.", "ok");
 });
 
 document.getElementById("copySecret").addEventListener("click", async () => {
@@ -83,7 +112,7 @@ document.getElementById("copyCmd").addEventListener("click", async () => {
   if (!secretValue()) document.getElementById("tapeSecret").value = mintSecret();
   if (!(await save())) return;
   await navigator.clipboard.writeText(npmCommand());
-  setStatus("Copied. In the grail-velocity folder (the one with package.json): paste that command. The server will print the same secret on boot.", "ok");
+  setStatus("Copied. Run it in the grail-velocity folder, the one with package.json.", "ok");
 });
 
 document.getElementById("check").addEventListener("click", async () => {

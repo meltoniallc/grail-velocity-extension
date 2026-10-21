@@ -46,9 +46,9 @@ function paintSuggest(hits) {
         <button class="row" type="button" data-q="${esc(hit.query || hit.title)}">
           <div>
             <div class="title">${esc(hit.title)}</div>
-            <div class="meta">${esc(hit.kind)} · ${hit.nKept ? hit.nKept + " kept" : "book"}</div>
+            <div class="meta">${esc(hit.kind || hit.status || "comp")} · ${hit.nKept ? hit.nKept + " kept" : hit.soldDate || hit.pageType || "book"}</div>
           </div>
-          <div class="gap">${money(hit.fastCash)}</div>
+          <div class="gap">${money(hit.fastCash ?? hit.price)}</div>
         </button>
       </li>`,
     )
@@ -64,9 +64,42 @@ function soldQuery(title) {
 
 function esc(s) {
   return String(s ?? "")
-    .replace(/&/g, "\u0026amp;")
-    .replace(/</g, "\u0026lt;")
-    .replace(/"/g, "\u0026quot;");
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/"/g, "&quot;");
+}
+
+function paintCapture(status) {
+  if (!status) return;
+  document.getElementById("today").textContent = String(status.today || 0);
+  document.getElementById("queue").textContent = String(status.queue || 0);
+  document.getElementById("capture-on").checked = status.captureEnabled !== false;
+  document.getElementById("site-ebay").checked = !status.sites || status.sites.ebay !== false;
+  const server = document.getElementById("server");
+  const sync = status.server;
+  server.className = "";
+  if (!sync) server.textContent = "Local";
+  else if (sync.ok) {
+    server.textContent = "Server up";
+    server.className = "ok";
+  } else if (sync.error === "no-api") server.textContent = "Local queue";
+  else {
+    server.textContent = "Server down";
+    server.className = "bad";
+  }
+  const last = document.getElementById("last");
+  if (status.last) last.textContent = `Last ${status.last.title} · ${money(status.last.price)}`;
+  else last.textContent = "No capture yet";
+  const note = document.getElementById("capture-note");
+  if (status.capturePausedUntil && Date.now() < status.capturePausedUntil) {
+    note.textContent = `Paused until ${new Date(status.capturePausedUntil).toLocaleTimeString()}`;
+  } else if (status.captureEnabled === false) note.textContent = "Capture is off.";
+  else note.textContent = "Pages you open. No crawling.";
+}
+
+async function sendPatch(patch) {
+  const res = await chrome.runtime.sendMessage({ type: "GV_CAPTURE_SETTINGS", patch });
+  paintCapture(res);
 }
 
 let typeGen = 0;
@@ -95,6 +128,19 @@ document.getElementById("q").addEventListener("input", () => {
   onTyped();
 });
 
+document.getElementById("lookup").addEventListener("click", async () => {
+  const q = document.getElementById("q").value.trim();
+  const note = document.getElementById("capture-note");
+  if (q.length < 2) {
+    note.textContent = "Type at least two characters, then Lookup.";
+    return;
+  }
+  const res = await chrome.runtime.sendMessage({ type: "GV_COMP_LOOKUP", q });
+  const hits = res?.hits || [];
+  paintSuggest(hits);
+  note.textContent = hits.length ? `${hits.length} comp hit${hits.length === 1 ? "" : "s"}.` : "No comp on the local queue or tape server.";
+});
+
 document.getElementById("suggest").addEventListener("click", (e) => {
   const btn = e.target.closest("[data-q]");
   if (!btn) return;
@@ -116,15 +162,35 @@ document.getElementById("read").addEventListener("click", async () => {
 
 document.getElementById("panel").addEventListener("click", async () => {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (tab?.id && chrome.sidePanel) {
-    await chrome.sidePanel.open({ tabId: tab.id });
-  }
+  if (tab?.id && chrome.sidePanel) await chrome.sidePanel.open({ tabId: tab.id });
   window.close();
+});
+
+document.getElementById("options").addEventListener("click", () => {
+  chrome.runtime.openOptionsPage();
+});
+
+document.getElementById("capture-on").addEventListener("change", (e) => {
+  sendPatch({ captureEnabled: e.target.checked });
+});
+
+document.getElementById("site-ebay").addEventListener("change", (e) => {
+  sendPatch({ sites: { ebay: e.target.checked } });
+});
+
+document.getElementById("pause-1h").addEventListener("click", async () => {
+  const res = await chrome.runtime.sendMessage({ type: "GV_CAPTURE_PAUSE", ms: 60 * 60 * 1000 });
+  paintCapture(res);
 });
 
 async function initPopup() {
   items = await GV.loadCatalog();
   renderCuts(items);
+  try {
+    paintCapture(await chrome.runtime.sendMessage({ type: "GV_CAPTURE_STATUS" }));
+  } catch {
+    /* popup still searches tape without the capture worker */
+  }
 }
 
 initPopup();

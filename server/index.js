@@ -12,6 +12,7 @@ const {
   getScratchSqlite,
   ensurePostgresMigrations,
 } = require("./store");
+const { ingestObservations, searchObservations } = require("./observe");
 const { resolveSecret } = require("./secret");
 const { listenHost, postgresPoolOptions, secretMatches } = require("./runtime");
 
@@ -152,6 +153,26 @@ const server = http.createServer(async (req, res) => {
         scans: pulled.scans,
         ttlDays: 7,
       });
+      return;
+    }
+    if (req.method === "POST" && url.pathname === "/observe") {
+      const payload = await readBody(req);
+      const list = Array.isArray(payload.observations) ? payload.observations : null;
+      if (!list) {
+        send(res, 400, { ok: false, error: "observations array required" });
+        return;
+      }
+      if (list.length > 80) {
+        send(res, 400, { ok: false, error: "too many observations" });
+        return;
+      }
+      const result = await ingestObservations(scratch, pool, list);
+      send(res, 200, { ok: true, scratch: "sqlite", ...result });
+      return;
+    }
+    if (req.method === "GET" && url.pathname === "/comps") {
+      const hits = searchObservations(scratch, url.searchParams.get("q") || "", 8);
+      send(res, 200, { hits });
       return;
     }
     if (req.method === "POST" && url.pathname === "/tape") {

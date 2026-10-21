@@ -318,6 +318,14 @@ test("content script and side panel call extracted overlay helpers", () => {
     "lib/core.js",
     "lib/overlay.js",
     "lib/suggest.js",
+    "lib/cardfields.js",
+    "lib/observe.js",
+    "content/parsers/common.js",
+    "content/parsers/cards.js",
+    "content/parsers/ebay-item.js",
+    "content/parsers/ebay-sold-search.js",
+    "content/parsers/ebay-active-search.js",
+    "content/capture.js",
     "content/ebay.js",
   ]);
   assert.match(demo, /lib\/overlay\.js/);

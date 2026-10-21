@@ -3,74 +3,59 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Grail Velocity tape</title>
+    <title>Grail Velocity options</title>
     <link rel="stylesheet" href="../popup/popup.css" />
-    <style>
-      body { width: 440px; padding-bottom: 16px; }
-      label { display: block; margin: 12px 16px 4px; font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); }
-      p.help { margin: 8px 16px 0; font-size: 12px; color: var(--subtle); line-height: 1.45; }
-      #opts { padding: 0 16px 16px; display: grid; gap: 8px; }
-      #opts input { width: 100%; }
-      .row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-      .row3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
-      #opts button.secondary { background: var(--raised); color: var(--fg); }
-      #status { margin: 0; font-size: 12px; color: var(--muted); min-height: 1.2em; line-height: 1.45; }
-      #status.ok { color: var(--ok); }
-      #status.bad { color: var(--danger); }
-      #syncStatus { margin: 4px 0 0; }
-      #syncStatus.ok { color: var(--ok); }
-      #syncStatus.bad { color: var(--danger); }
-      #syncStatus.idle { color: var(--subtle); }
-      code { font-family: ui-monospace, Menlo, monospace; font-size: 11px; }
-      .scratch-list { list-style: none; margin: 8px 0 0; padding: 0; max-height: 220px; overflow: auto; display: grid; gap: 6px; }
-      .scratch-list li { font-size: 12px; line-height: 1.4; color: var(--fg); padding: 6px 8px; background: var(--raised); border-radius: 4px; }
-      .scratch-list .bucket { display: inline-block; min-width: 5.5em; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
-      .scratch-list .bucket.cliff { color: var(--warn); }
-      .scratch-list .bucket.weak_title { color: var(--warn); }
-      .scratch-list .bucket.active { color: var(--ok); }
-      .scratch-list .empty { color: var(--subtle); background: transparent; padding: 0; }
-    </style>
+    <link rel="stylesheet" href="options.css" />
   </head>
   <body>
     <header>
-      <p class="kicker">Options</p>
-      <h1>Tape store</h1>
+      <h1>Options</h1>
     </header>
-    <p class="help">The extension already keeps sold comps on this machine. The tape server is optional: Postgres for verified prices, SQLite for junk. Tape API stays <code>http://127.0.0.1:8787</code> for <code>npm run tape</code>, or <code>https://tape-production-2810.up.railway.app</code>. Other hosts are refused. The shared secret has to match either way.</p>
+    <p class="help">Capture records an eBay page only while you are looking at it. Checkout, messages, and My eBay stay paused. The seller HMAC secret never leaves this browser.</p>
     <form id="opts">
-      <label class="check" for="autoCapture" style="display:flex;align-items:flex-start;gap:10px;text-transform:none;letter-spacing:0;font-size:13px;color:var(--fg);line-height:1.4">
-        <input id="autoCapture" type="checkbox" checked style="width:auto;margin-top:2px" />
-        <span>Auto-capture on sold / search / listing</span>
-      </label>
-      <p class="help" style="margin-top:0">Default on (same as today). When off, MutationObserver and SPA location auto-reads stop; <strong>Scrape this page</strong> still works.</p>
-      <label for="tapeApi">Tape API</label>
+      <h2>Capture</h2>
+      <label class="switch"><input id="capture-on" type="checkbox" /> Capture on</label>
+      <label class="switch"><input id="site-ebay" type="checkbox" /> eBay</label>
+      <label class="switch"><input id="autoCapture" type="checkbox" checked /> Auto-capture on sold / search / listing</label>
+      <p class="help">Default on (same as today). When off, MutationObserver and SPA location auto-reads stop; <strong>Scrape this page</strong> still works.</p>
+      <label class="field" for="pause-list">Pause list</label>
+      <textarea id="pause-list" spellcheck="false" aria-describedby="pause-help"></textarea>
+      <p id="pause-help" class="help">One URL fragment per line, at least 6 characters. Whole-site ebay.com is rejected.</p>
+      <label class="field" for="own-seller">Your store id</label>
+      <input id="own-seller" type="text" autocomplete="off" spellcheck="false" />
+      <label class="field" for="seller-secret">Seller HMAC secret</label>
+      <input id="seller-secret" type="text" autocomplete="off" spellcheck="false" />
+      <h2>Tape server</h2>
+      <p class="help">Optional. Postgres for verified prices, SQLite for junk; the queue still lands in SQLite when Postgres is down. Tape API stays <code>http://127.0.0.1:8787</code> for <code>npm run tape</code> (it prints the shared secret), or <code>https://tape-production-2810.up.railway.app</code>. Other hosts are refused. The shared secret has to match either way.</p>
+      <label class="field" for="tapeApi">Tape API</label>
       <input id="tapeApi" type="url" placeholder="http://127.0.0.1:8787" autocomplete="off" />
-      <label for="tapeSecret">Shared secret</label>
-      <input id="tapeSecret" type="text" placeholder="paste the line printed by npm run tape" autocomplete="off" spellcheck="false" />
+      <label class="field" for="tapeSecret">Shared secret</label>
+      <input id="tapeSecret" type="text" autocomplete="off" spellcheck="false" />
       <div class="row3">
-        <button type="button" class="secondary" id="mint">Mint</button>
-        <button type="button" class="secondary" id="copySecret">Copy secret</button>
-        <button type="button" class="secondary" id="copyCmd">Copy npm command</button>
+        <button type="button" class="ghost" id="mint">Mint</button>
+        <button type="button" class="ghost" id="copySecret">Copy secret</button>
+        <button type="button" class="ghost" id="copyCmd">Copy npm command</button>
       </div>
       <div class="row">
-        <button type="button" class="secondary" id="check">Check connection</button>
+        <button type="button" class="ghost" id="check">Check connection</button>
         <button id="save" type="submit">Save</button>
       </div>
       <p id="syncStatus" class="help sync" aria-live="polite">Last push: —</p>
-      <label for="pullQuery">Pull / inspect query</label>
+      <label class="field" for="pullQuery">Pull / inspect query</label>
       <input id="pullQuery" type="text" placeholder="e.g. 2023-24 Topps Mercury … #5 Refractor 74/99" autocomplete="off" spellcheck="false" />
-      <p class="help" style="margin-top:0">Cold Chrome / cleared storage: pull verified solds for one query from Postgres into local tape. Scratch and live asks stay out of Fast-Cash.</p>
-      <button type="button" class="secondary" id="pull">Pull from server</button>
+      <p class="help">Cold Chrome / cleared storage: pull verified solds for one query from Postgres into local tape. Scratch and live asks stay out of Fast-Cash.</p>
+      <button type="button" class="ghost" id="pull">Pull from server</button>
       <p class="help">Scratch inspector: last parked reasons for this query (cliff / weak_title / active ask). Local Chrome tape first; optional server read is SQLite only (7d TTL) and never feeds Fast-Cash.</p>
       <div class="row">
-        <button type="button" class="secondary" id="scratchLocal">Inspect local scratch</button>
-        <button type="button" class="secondary" id="scratchRemote">Inspect server scratch</button>
+        <button type="button" class="ghost" id="scratchLocal">Inspect local scratch</button>
+        <button type="button" class="ghost" id="scratchRemote">Inspect server scratch</button>
       </div>
       <ul id="scratchList" class="scratch-list" aria-live="polite"></ul>
-      <p id="status"></p>
+      <p id="status" role="status"></p>
     </form>
     <script src="../lib/core.js"></script>
     <script src="../lib/overlay.js"></script>
+    <script src="../lib/observe.js"></script>
     <script src="options.js"></script>
   </body>
 </html>

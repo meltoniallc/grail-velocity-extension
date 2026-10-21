@@ -1,0 +1,25 @@
+{
+  "cs-wemb-1": {
+    "year": "2023",
+    "set": "Topps Chrome",
+    "parallel": "Refractor",
+    "player": "Victor Wembanyama",
+    "card_no": "1",
+    "serial_denom": "99",
+    "grade_co": "PSA",
+    "grade": "10"
+  },
+  "cs-harper": {
+    "year": "2024",
+    "set": "Bowman Chrome",
+    "player": "Bryce Harper",
+    "card_no": "10",
+    "is_auto": true
+  },
+  "cs-now": {
+    "year": "2024",
+    "set": "Topps Now",
+    "player": "Victor Wembanyama",
+    "card_no": "12"
+  }
+}
