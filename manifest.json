@@ -5,9 +5,7 @@
   "description": "Meltonia operator desk on eBay. Fast-Cash is sold tape only. Auto-capture records pages you open.",
   "permissions": [
     "storage",
-    "tabs",
     "sidePanel",
-    "scripting",
     "alarms"
   ],
   "host_permissions": [
@@ -61,8 +59,7 @@
     {
       "resources": [
         "content/overlay.css",
-        "catalog.json",
-        "icons/*"
+        "catalog.json"
       ],
       "matches": [
         "https://*.ebay.com/*"
