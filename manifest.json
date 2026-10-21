@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Grail Velocity",
-  "version": "2.0.2",
+  "version": "2.0.3",
   "description": "Meltonia operator desk on eBay. Fast-Cash is sold tape only. Auto-capture records pages you open.",
   "permissions": [
     "storage",

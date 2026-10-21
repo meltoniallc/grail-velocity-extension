@@ -41,9 +41,29 @@ function paintSync(sync) {
   el.className = `help sync ${info.kind}`;
 }
 
+async function applyOptionsFocus(focus) {
+  if (!focus || typeof focus !== "object") return;
+  const q = String(focus.pullQuery || "").trim();
+  if (q) document.getElementById("pullQuery").value = q;
+  await chrome.storage.local.remove("optionsFocus");
+  if (focus.inspectScratch && q) {
+    await inspectScratch(focus.inspectScratch === "remote");
+  } else if (q) {
+    setStatus("Query ready — Pull from server or Inspect scratch.", "ok");
+  }
+}
+
 async function load() {
-  const data = await chrome.storage.local.get(["tapeApi", "tapeSecret", "captureSettings", "autoCapture", "tapeSync"]);
-  document.getElementById("tapeApi").value = data.tapeApi || "http://127.0.0.1:8787";
+  const presets = globalThis.GV.tapeApiPresets();
+  const data = await chrome.storage.local.get([
+    "tapeApi",
+    "tapeSecret",
+    "captureSettings",
+    "autoCapture",
+    "tapeSync",
+    "optionsFocus",
+  ]);
+  document.getElementById("tapeApi").value = data.tapeApi || presets.railway;
   document.getElementById("tapeSecret").value = data.tapeSecret || "";
   document.getElementById("autoCapture").checked = globalThis.GV.autoCaptureEnabled(data.autoCapture);
   paintSync(data.tapeSync);
@@ -54,6 +74,21 @@ async function load() {
   document.getElementById("pause-list").value = patterns.join("\n");
   document.getElementById("seller-secret").value = prefs.sellerHmacSecret || "";
   document.getElementById("own-seller").value = prefs.ownSellerId || "";
+  await applyOptionsFocus(data.optionsFocus);
+}
+
+async function applyPreset(kind) {
+  const presets = globalThis.GV.tapeApiPresets();
+  const url = kind === "local" ? presets.local : presets.railway;
+  document.getElementById("tapeApi").value = url;
+  document.getElementById("tapeSecret").focus();
+  if (!(await save())) return;
+  setStatus(
+    kind === "local"
+      ? "Local Tape URL saved. Paste the secret from npm run tape, then Check connection."
+      : "Railway Tape URL saved. Paste TAPE_SECRET from Railway → tape service, then Check connection.",
+    "ok",
+  );
 }
 
 async function saveCapture() {
@@ -72,10 +107,8 @@ async function saveCapture() {
 async function save() {
   const tapeApi = apiUrl();
   if (tapeApi && !globalThis.GV.tapeApiAllowed(tapeApi)) {
-    setStatus(
-      "Tape API must be http://127.0.0.1:8787 or https://tape-production-2810.up.railway.app.",
-      "bad",
-    );
+    const presets = globalThis.GV.tapeApiPresets();
+    setStatus(`Tape API must be ${presets.local} or ${presets.railway}.`, "bad");
     return false;
   }
   const tapeSecret = secretValue();
@@ -90,6 +123,9 @@ document.getElementById("opts").addEventListener("submit", async (e) => {
   if (!(await save())) return;
   setStatus("Saved. Reload eBay tabs if the API URL changed.", "ok");
 });
+
+document.getElementById("presetRailway").addEventListener("click", () => applyPreset("railway"));
+document.getElementById("presetLocal").addEventListener("click", () => applyPreset("local"));
 
 document.getElementById("mint").addEventListener("click", async () => {
   document.getElementById("tapeSecret").value = mintSecret();

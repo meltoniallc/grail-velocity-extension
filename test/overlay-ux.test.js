@@ -199,8 +199,27 @@ test("formatTapeSync surfaces OK / fail / idle for Options and overlay", () => {
   assert.match(ok.label, /sync OK/);
   const bad = GV.formatTapeSync({ ok: false, error: "ECONNREFUSED", at: now - 120_000 }, now);
   assert.equal(bad.kind, "bad");
-  assert.match(bad.label, /sync fail/);
+  assert.match(bad.label, /SYNC FAIL/);
   assert.match(bad.detail, /ECONNREFUSED/);
+  assert.match(bad.banner, /SYNC FAIL/);
+  assert.match(bad.banner, /Options/);
+});
+
+test("tapeApiPresets prefer Railway and keep local loopback", () => {
+  const presets = GV.tapeApiPresets();
+  assert.equal(presets.railway, "https://tape-production-2810.up.railway.app");
+  assert.equal(presets.local, "http://127.0.0.1:8787");
+  assert.equal(GV.TAPE_API_RAILWAY, presets.railway);
+  assert.equal(GV.tapeApiAllowed(presets.railway), true);
+  assert.equal(GV.tapeApiAllowed(presets.local), true);
+});
+
+test("optionsScratchFocus parks query for Options cliff → scratch", () => {
+  const focus = GV.optionsScratchFocus("  Mercury #5  ");
+  assert.equal(focus.pullQuery, "Mercury #5");
+  assert.equal(focus.inspectScratch, "local");
+  assert.ok(focus.at > 0);
+  assert.equal(GV.optionsScratchFocus("").pullQuery, "");
 });
 
 test("autoCapture defaults ON; pref off ⇒ no scheduled auto-read", () => {
@@ -284,11 +303,21 @@ test("content script and side panel call extracted overlay helpers", () => {
   assert.match(optsHtml, /id="scratchRemote"/);
   assert.match(optsHtml, /id="scratchList"/);
   assert.match(optsHtml, /id="syncStatus"/);
+  assert.match(optsHtml, /id="presetRailway"/);
+  assert.match(optsHtml, /id="presetLocal"/);
+  assert.match(optsHtml, /Use Railway Tape/);
+  assert.match(optsJs, /presetRailway/);
+  assert.match(optsJs, /tapeApiPresets/);
+  assert.match(optsJs, /optionsFocus/);
   assert.match(optsJs, /GV_SCRATCH_GET/);
   assert.match(optsJs, /GV_SCRATCH_REMOTE/);
   assert.match(optsJs, /GV\.scratchReasons\(/);
   assert.match(optsJs, /GV\.formatTapeSync\(/);
   assert.match(optsJs, /paintSync/);
+  assert.match(ebay, /data-act="scratch"/);
+  assert.match(ebay, /optionsScratchFocus/);
+  assert.match(ebay, /gv-sync-banner/);
+  assert.match(ebay, /openOptionsPage/);
   assert.match(panel, /GV\.formatLastRead\(/);
   assert.match(panel, /GV\.queueCopyText\(/);
   const panelHtml = fs.readFileSync(path.join(__dirname, "../sidepanel/index.html"), "utf8");
@@ -300,6 +329,8 @@ test("content script and side panel call extracted overlay helpers", () => {
   assert.match(overlayCss, /\.gv-role-ask/);
   assert.match(overlayCss, /\.gv-role-book/);
   assert.match(overlayCss, /\.gv-sync/);
+  assert.match(overlayCss, /\.gv-sync-banner/);
+  assert.match(overlayCss, /prefers-reduced-motion:\s*reduce/);
   assert.match(ebay, /GV\.listedAsk\(/);
   assert.match(ebay, /GV\.mergeKeepIntoSoldTape\(/);
   assert.match(ebay, /soldTape = \[\]/);

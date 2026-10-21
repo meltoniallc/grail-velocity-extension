@@ -189,9 +189,31 @@
 }
 .gv-sync.ok { color: var(--ok); }
 .gv-sync.ok::before { background: var(--ok); }
-.gv-sync.bad { color: var(--danger); }
+.gv-sync.bad {
+  color: var(--danger);
+  font-weight: 600;
+  letter-spacing: 0.12em;
+}
 .gv-sync.bad::before { background: var(--danger); }
 .gv-sync.idle { color: var(--subtle); }
+.gv-sync-banner {
+  margin: 0;
+  padding: 10px 16px;
+  background: rgba(196, 92, 74, 0.18);
+  border-bottom: 1px solid rgba(196, 92, 74, 0.45);
+  color: var(--danger);
+  font-size: 12px;
+  line-height: 1.4;
+  letter-spacing: 0.02em;
+  animation: gv-sync-pulse 1.6s ease-in-out 2;
+}
+@media (prefers-reduced-motion: reduce) {
+  .gv-sync-banner { animation: none; }
+}
+@keyframes gv-sync-pulse {
+  0%, 100% { background: rgba(196, 92, 74, 0.18); }
+  50% { background: rgba(196, 92, 74, 0.32); }
+}
 .gv-dl { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
 .gv-dl dt { font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--subtle); }
 .gv-dl dd { margin: 4px 0 0; font-variant-numeric: tabular-nums; }

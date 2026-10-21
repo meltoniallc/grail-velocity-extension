@@ -26,9 +26,13 @@
       <label class="field" for="seller-secret">Seller HMAC secret</label>
       <input id="seller-secret" type="text" autocomplete="off" spellcheck="false" />
       <h2>Tape server</h2>
-      <p class="help">Optional. Postgres for verified prices, SQLite for junk; the queue still lands in SQLite when Postgres is down. Tape API stays <code>http://127.0.0.1:8787</code> for <code>npm run tape</code> (it prints the shared secret), or <code>https://tape-production-2810.up.railway.app</code>. Other hosts are refused. The shared secret has to match either way.</p>
+      <p class="help">Optional. Postgres for verified prices, SQLite for junk; the queue still lands in SQLite when Postgres is down. Prefer <strong>Use Railway Tape</strong> (hosted), or local <code>http://127.0.0.1:8787</code> for <code>npm run tape</code>. Other hosts are refused. Paste the matching shared secret either way.</p>
+      <div class="row">
+        <button type="button" class="ghost" id="presetRailway">Use Railway Tape</button>
+        <button type="button" class="ghost" id="presetLocal">Use local Tape</button>
+      </div>
       <label class="field" for="tapeApi">Tape API</label>
-      <input id="tapeApi" type="url" placeholder="http://127.0.0.1:8787" autocomplete="off" />
+      <input id="tapeApi" type="url" placeholder="https://tape-production-2810.up.railway.app" autocomplete="off" />
       <label class="field" for="tapeSecret">Shared secret</label>
       <input id="tapeSecret" type="text" autocomplete="off" spellcheck="false" />
       <div class="row3">
