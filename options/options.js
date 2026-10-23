@@ -1,11 +1,3 @@
-function apiUrl() {
-  return document.getElementById("tapeApi").value.trim().replace(/\/+$/, "");
-}
-
-function secretValue() {
-  return document.getElementById("tapeSecret").value.trim();
-}
-
 function setStatus(text, kind) {
   const el = document.getElementById("status");
   el.textContent = text;
@@ -23,6 +15,16 @@ function paintSync(sync) {
   el.className = `help sync ${info.kind}`;
 }
 
+function paintTapeEndpoint(tapeApi, hasSecret) {
+  const el = document.getElementById("tapeEndpoint");
+  if (!el) return;
+  const url = String(tapeApi || "").trim() || "—";
+  el.textContent = hasSecret
+    ? `Tape: ${url} (secret built in)`
+    : `Tape: ${url} (zip missing baked secret — agents must re-package with MELTONIA_TAPE_SECRET)`;
+  el.className = `help tight sync ${hasSecret ? "ok" : "bad"}`;
+}
+
 async function applyOptionsFocus(focus) {
   if (!focus || typeof focus !== "object") return;
   const q = String(focus.pullQuery || "").trim();
@@ -37,17 +39,26 @@ async function applyOptionsFocus(focus) {
   }
 }
 
+/**
+ * Resolve Tape API + secret from storage, seeded from Meltonia zip defaults.
+ * Options never asks Meltonia to paste a secret.
+ */
+async function resolveTapeSettings() {
+  await globalThis.GV.seedMeltoniaTapeDefaults(chrome.storage.local, { force: false });
+  const defaults = globalThis.GV.meltoniaTapeDefaults();
+  const data = await chrome.storage.local.get(["tapeApi", "tapeSecret"]);
+  const tapeApi = String(data.tapeApi || defaults.tapeApi || "").replace(/\/+$/, "");
+  const tapeSecret = String(data.tapeSecret || defaults.tapeSecret || "");
+  if (tapeApi && !globalThis.GV.tapeApiAllowed(tapeApi)) {
+    return { ok: false, error: `Tape URL must be ${defaults.tapeApi} or loopback.` };
+  }
+  return { ok: true, tapeApi, tapeSecret };
+}
+
 async function load() {
-  const presets = globalThis.GV.tapeApiPresets();
-  const data = await chrome.storage.local.get([
-    "tapeApi",
-    "tapeSecret",
-    "autoCapture",
-    "tapeSync",
-    "optionsFocus",
-  ]);
-  document.getElementById("tapeApi").value = data.tapeApi || presets.railway;
-  document.getElementById("tapeSecret").value = data.tapeSecret || "";
+  const resolved = await resolveTapeSettings();
+  paintTapeEndpoint(resolved.tapeApi, Boolean(resolved.tapeSecret));
+  const data = await chrome.storage.local.get(["autoCapture", "tapeSync", "optionsFocus"]);
   document.getElementById("autoCapture").checked = globalThis.GV.autoCaptureEnabled(data.autoCapture);
   paintSync(data.tapeSync);
   try {
@@ -58,20 +69,6 @@ async function load() {
     /* options still works offline of manifest */
   }
   await applyOptionsFocus(data.optionsFocus);
-}
-
-async function applyPreset(kind) {
-  const presets = globalThis.GV.tapeApiPresets();
-  const url = kind === "local" ? presets.local : presets.railway;
-  document.getElementById("tapeApi").value = url;
-  document.getElementById("tapeSecret").focus();
-  if (!(await save())) return;
-  setStatus(
-    kind === "local"
-      ? "Local Tape URL saved. Paste the secret from npm run tape, then Check connection."
-      : "Railway Tape URL saved. Paste TAPE_SECRET from Railway → tape service, then Check connection.",
-    "ok",
-  );
 }
 
 /**
@@ -90,27 +87,27 @@ async function saveCaptureAligned(autoCapture) {
 }
 
 async function save() {
-  const tapeApi = apiUrl();
-  if (tapeApi && !globalThis.GV.tapeApiAllowed(tapeApi)) {
-    const presets = globalThis.GV.tapeApiPresets();
-    setStatus(`Tape URL must be ${presets.local} or ${presets.railway}.`, "bad");
+  const resolved = await resolveTapeSettings();
+  if (!resolved.ok) {
+    setStatus(resolved.error || "Bad Tape settings.", "bad");
     return false;
   }
-  const tapeSecret = secretValue();
   const autoCapture = document.getElementById("autoCapture").checked;
-  await chrome.storage.local.set({ tapeApi, tapeSecret, autoCapture });
+  await chrome.storage.local.set({
+    tapeApi: resolved.tapeApi,
+    tapeSecret: resolved.tapeSecret,
+    autoCapture,
+  });
   await saveCaptureAligned(autoCapture);
+  paintTapeEndpoint(resolved.tapeApi, Boolean(resolved.tapeSecret));
   return true;
 }
 
 document.getElementById("opts").addEventListener("submit", async (e) => {
   e.preventDefault();
   if (!(await save())) return;
-  setStatus("Saved. Reload eBay tabs if the Tape URL changed.", "ok");
+  setStatus("Saved.", "ok");
 });
-
-document.getElementById("presetRailway").addEventListener("click", () => applyPreset("railway"));
-document.getElementById("presetLocal").addEventListener("click", () => applyPreset("local"));
 
 document.getElementById("check").addEventListener("click", async () => {
   if (!(await save())) return;
@@ -120,8 +117,10 @@ document.getElementById("check").addEventListener("click", async () => {
     if (res?.ok) {
       setStatus(
         res.postgres
-          ? "Connected. Verified solds will persist in Postgres."
-          : "Connected. No DATABASE_URL, so verified solds stay in the extension; junk still parks in SQLite.",
+          ? res.schema
+            ? `Connected. Verified solds persist in Postgres (${res.schema}).`
+            : "Connected. Verified solds will persist in Postgres."
+          : "Connected. No DATABASE_URL on Tape yet; solds stay in the extension until agents wire Postgres.",
         "ok",
       );
       return;

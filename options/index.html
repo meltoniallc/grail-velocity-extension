@@ -21,15 +21,10 @@
       <p class="help tight">One switch. Off stops auto-reads; <strong>Scrape this page</strong> still works. Popup Pause 1 hour still applies.</p>
 
       <h2>Tape</h2>
-      <p class="help tight">Hosted Railway Tape for Meltonia desk. Paste the service secret once; Check connection.</p>
-      <div class="row">
-        <button type="button" class="ghost" id="presetRailway">Use Railway Tape</button>
-        <button type="button" class="ghost" id="presetLocal">Use local Tape</button>
-      </div>
-      <label class="field" for="tapeApi">Tape URL</label>
-      <input id="tapeApi" type="url" placeholder="https://tape-production-2810.up.railway.app" autocomplete="off" />
-      <label class="field" for="tapeSecret">Tape secret</label>
-      <input id="tapeSecret" type="password" autocomplete="off" spellcheck="false" />
+      <p class="help tight">
+        Hosted Meltonia Tape is built into this zip. Sync needs no secret paste — Check connection only.
+      </p>
+      <p id="tapeEndpoint" class="help tight sync" aria-live="polite">Tape: —</p>
       <div class="row">
         <button type="button" class="ghost" id="check">Check connection</button>
         <button id="save" type="submit">Save</button>
@@ -51,6 +46,7 @@
       <p id="status" role="status"></p>
     </form>
     <script src="../lib/core.js"></script>
+    <script src="../lib/meltonia-defaults.js"></script>
     <script src="../lib/overlay.js"></script>
     <script src="../lib/observe.js"></script>
     <script src="options.js"></script>

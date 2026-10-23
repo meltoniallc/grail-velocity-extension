@@ -9,8 +9,9 @@ Build (from repo root):
 3. chrome://extensions → Developer mode ON → Load unpacked → that folder
    Not the zip. Not grok-workspace. Not Downloads.
 4. Pin it. Stay signed into eBay.
-5. Options: Use Railway Tape → paste Tape secret → Check connection.
+5. Options: Check connection (Tape URL + secret are built into this Meltonia zip).
    One auto-capture switch. Popup still has Pause 1 hour. Checkout, messages, and My eBay stay paused.
+   Do not paste TAPE_SECRET — agents bake it when packaging.
 6. Any eBay tab → overlay → Scrape this page (live, listing, or solds).
    Chip must say TAPE before you Apply. Live asks never set Fast-Cash.
 7. Book ref is catalog, not this page. Do not apply it.

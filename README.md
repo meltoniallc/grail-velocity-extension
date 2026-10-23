@@ -32,7 +32,7 @@ Chromium MV3 overlay. Reads eBay sold tape as you. Fast-Cash is **sold tape only
 1. Download a Release asset named `grail-velocity-2.1.0-meltonia.zip` when published, or from a checkout: `npm run package` → `dist/grail-velocity-2.1.0-meltonia.zip`
 2. Unzip. Open the `grail-velocity` folder (`manifest.json` must be in it).
 3. chrome://extensions → Developer mode → Load unpacked → that folder.
-4. Pin the icon. Options → **Use Railway Tape** → paste Tape secret → **Check connection**. Zero-config otherwise (auto-capture on).
+4. Pin the icon. Meltonia zip: Tape URL + secret are already baked — Options is Check connection only (no paste). Auto-capture on.
 5. Popup: Capture and eBay default on. Pause 1 hour stops capture. Checkout, messages, and My eBay stay on the built-in pause list.
 
 ## Compliance
@@ -58,7 +58,7 @@ npm install
 DATABASE_URL=postgres://… TAPE_SECRET=$(openssl rand -hex 32) SQLITE_PATH=./data/scratch.sqlite npm run tape
 ```
 
-Options → Tape API `http://127.0.0.1:8787` + the printed secret. Skip this unless you want Postgres retention.
+Local Tape is for agents/dev only (`http://127.0.0.1:8787`). Meltonia desk uses the baked Railway host from the Meltonia zip — no Options secret field.
 
 `POST /observe` accepts batches from the extension. Existing `GET /health`, `GET /ping`, `GET /suggest`, and `POST /tape` stay. Postgres tables for capture are migrations v3 (`cards`, `observations`, `comps`, `sku_mappings`) and v4 (`embeddings`, only when pgvector can be enabled) in the same `schema_migrations` list in `server/store.js` that runs at server start.
 
@@ -74,9 +74,9 @@ python3 scripts/load_mascot.py
 
 CardSight writes cards, comps (`source=cardsight`), and sku mappings. The Mascot script only reads a SKU-mapping CSV.
 
-Hosted Tape is `https://tape-production-2810.up.railway.app` only. Options → **Use Railway Tape** fills that URL (paste `TAPE_SECRET` from the Railway `tape` service). **Use local Tape** fills `http://127.0.0.1:8787`. The extension will not send the shared secret to any other host. `TAPE_SECRET` is not printed by the Railway process. `DATABASE_URL` stays on the service, not in the extension.
+Hosted Tape is `https://tape-production-2810.up.railway.app`. The private Meltonia zip bakes that URL and the matching `TAPE_SECRET` into `lib/meltonia-defaults.js` at package time (`MELTONIA_TAPE_SECRET=… npm run package`, or `MELTONIA_PACKAGE_STRICT=1` to refuse an empty bake). Meltonia never pastes the secret in Options. Agents own Railway `TAPE_SECRET` + the bake; the git tree keeps an empty stub so a live secret is never committed. The extension only sends the secret to the allowlisted Tape host.
 
-Shared Meltonia Postgres: point the Railway `tape` service `DATABASE_URL` at the same Postgres meltonia-automation already runs (event-spine / pgvector host), and set `PG_SCHEMA=grail_tape`. Tape creates that schema and keeps `verified_prices` / `tape_snapshots` / observe tables there — additive only; it does not drop or rewrite other schemas. Scratch stays SQLite on the Tape service. Meltonia still pastes one Tape secret in Options (URL is already the Railway default).
+Shared Meltonia Postgres: point the Railway `tape` service `DATABASE_URL` at the same Postgres meltonia-automation already runs (event-spine / pgvector host), and set `PG_SCHEMA=grail_tape`. Tape creates that schema and keeps `verified_prices` / `tape_snapshots` / observe tables there — additive only; it does not drop or rewrite other schemas. Scratch stays SQLite on the Tape service.
 
 ## Performance (2.0.1)
 
