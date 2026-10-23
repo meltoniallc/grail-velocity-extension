@@ -8,6 +8,8 @@ const ROOT = path.resolve(__dirname, "..");
 const OUT_DIR = path.join(ROOT, "dist");
 const STAGE = path.join(OUT_DIR, "grail-velocity");
 const ZIP = path.join(OUT_DIR, "grail-velocity-2.1.0-meltonia.zip");
+const DEFAULTS_REL = "lib/meltonia-defaults.js";
+const DEFAULT_TAPE_API = "https://tape-production-2810.up.railway.app";
 
 /** Runtime files required to load-unpacked per INSTALL / manifest. */
 const INCLUDE = [
@@ -15,6 +17,7 @@ const INCLUDE = [
   "background.js",
   "catalog.json",
   "lib/core.js",
+  "lib/meltonia-defaults.js",
   "lib/tape.js",
   "lib/overlay.js",
   "lib/suggest.js",
@@ -195,33 +198,115 @@ function readZipEntry(zipPath, entryName) {
   throw new Error(`zip entry not found: ${entryName}`);
 }
 
-function packageExtension() {
+/**
+ * Bake Meltonia Tape URL + secret into the zip only (not back into git).
+ * MELTONIA_TAPE_SECRET (or TAPE_SECRET) required when MELTONIA_PACKAGE_STRICT=1.
+ */
+function resolveMeltoniaBake(env = process.env) {
+  const tapeApi = String(env.MELTONIA_TAPE_API || DEFAULT_TAPE_API)
+    .trim()
+    .replace(/\/+$/, "");
+  const tapeSecret = String(env.MELTONIA_TAPE_SECRET || env.TAPE_SECRET || "").trim();
+  const strict =
+    String(env.MELTONIA_PACKAGE_STRICT || "").trim() === "1" ||
+    String(env.MELTONIA_PACKAGE_STRICT || "").toLowerCase() === "true";
+  if (strict && !tapeSecret) {
+    throw new Error(
+      "MELTONIA_PACKAGE_STRICT requires MELTONIA_TAPE_SECRET (Railway tape service secret). Do not commit it.",
+    );
+  }
+  return { tapeApi, tapeSecret, strict };
+}
+
+function renderMeltoniaDefaultsSource({ tapeApi, tapeSecret }) {
+  return `"use strict";
+
+/**
+ * Generated for the private Meltonia zip — do not commit live secrets.
+ * Agents set MELTONIA_TAPE_SECRET at package time; Railway holds the same value.
+ */
+(function (global) {
+  const GV = global.GV || (global.GV = {});
+  const TAPE_API = ${JSON.stringify(tapeApi)};
+
+  GV.MELTONIA_TAPE_DEFAULTS = {
+    tapeApi: TAPE_API,
+    tapeSecret: ${JSON.stringify(tapeSecret)},
+  };
+
+  GV.meltoniaTapeDefaults = function meltoniaTapeDefaults() {
+    const d = GV.MELTONIA_TAPE_DEFAULTS || {};
+    return {
+      tapeApi: String(d.tapeApi || TAPE_API).replace(new RegExp("/+$"), ""),
+      tapeSecret: String(d.tapeSecret || ""),
+    };
+  };
+
+  GV.seedMeltoniaTapeDefaults = async function seedMeltoniaTapeDefaults(storage, opts) {
+    const force = Boolean(opts && opts.force);
+    const d = GV.meltoniaTapeDefaults();
+    if (!d.tapeApi) return { ok: false, skipped: "no-defaults" };
+    const cur = await storage.get(["tapeApi", "tapeSecret"]);
+    const patch = {};
+    const haveApi = String(cur.tapeApi || "").trim();
+    const haveSecret = String(cur.tapeSecret || "").trim();
+    if (force || !haveApi) patch.tapeApi = d.tapeApi;
+    if (d.tapeSecret && (force || !haveSecret)) patch.tapeSecret = d.tapeSecret;
+    if (!Object.keys(patch).length) return { ok: true, seeded: false };
+    await storage.set(patch);
+    return { ok: true, seeded: true, keys: Object.keys(patch) };
+  };
+})(typeof globalThis !== "undefined" ? globalThis : self);
+`;
+}
+
+function packageExtension(opts = {}) {
+  const env = opts.env || process.env;
+  const bake = resolveMeltoniaBake(env);
+  const defaultsSource = renderMeltoniaDefaultsSource(bake);
+
   fs.mkdirSync(OUT_DIR, { recursive: true });
   fs.rmSync(STAGE, { recursive: true, force: true });
   fs.rmSync(ZIP, { force: true });
 
   const entries = [];
   for (const rel of INCLUDE) {
-    const src = path.join(ROOT, rel);
-    if (!fs.existsSync(src)) {
-      throw new Error(`missing package input: ${rel}`);
-    }
     const dest = path.join(STAGE, rel);
     fs.mkdirSync(path.dirname(dest), { recursive: true });
-    fs.copyFileSync(src, dest);
+    let data;
+    if (rel === DEFAULTS_REL) {
+      data = Buffer.from(defaultsSource, "utf8");
+      fs.writeFileSync(dest, data);
+    } else {
+      const src = path.join(ROOT, rel);
+      if (!fs.existsSync(src)) {
+        throw new Error(`missing package input: ${rel}`);
+      }
+      fs.copyFileSync(src, dest);
+      data = fs.readFileSync(src);
+    }
     entries.push({
       name: `grail-velocity/${rel.replace(/\\/g, "/")}`,
-      data: fs.readFileSync(src),
+      data,
     });
   }
 
   writeZip(ZIP, entries);
-  return { zipPath: ZIP, include: INCLUDE.slice() };
+  return {
+    zipPath: ZIP,
+    include: INCLUDE.slice(),
+    baked: { tapeApi: bake.tapeApi, hasSecret: Boolean(bake.tapeSecret) },
+  };
 }
 
 if (require.main === module) {
   const result = packageExtension();
   console.log(result.zipPath);
+  console.log(
+    result.baked.hasSecret
+      ? `baked Tape ${result.baked.tapeApi} (secret yes)`
+      : `baked Tape ${result.baked.tapeApi} (secret empty — set MELTONIA_TAPE_SECRET for Meltonia handoff)`,
+  );
 }
 
 module.exports = {
@@ -229,7 +314,10 @@ module.exports = {
   ZIP,
   STAGE,
   OUT_DIR,
+  DEFAULT_TAPE_API,
   packageExtension,
+  resolveMeltoniaBake,
+  renderMeltoniaDefaultsSource,
   listZipNames,
   readZipEntry,
 };

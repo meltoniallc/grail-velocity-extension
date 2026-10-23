@@ -3,6 +3,7 @@
 const { DatabaseSync } = require("node:sqlite");
 const path = require("node:path");
 const fs = require("node:fs");
+const { postgresSchemaName, quotePgIdent } = require("./runtime");
 
 const SCRATCH_TTL_MS = 7 * 24 * 3600 * 1000;
 
@@ -441,6 +442,20 @@ function schemaMigrationsDdl() {
 const migrationsDone = new WeakMap();
 
 /**
+ * Create PG_SCHEMA (when set) and pin this connection's search_path.
+ * Pool startup options already set search_path for new clients; this covers
+ * the migration connection and mock pools without libpq options.
+ */
+async function ensurePostgresSchema(pool, env = process.env) {
+  const schema = postgresSchemaName(env);
+  if (!schema) return { schema: null };
+  const ident = quotePgIdent(schema);
+  await pool.query(`CREATE SCHEMA IF NOT EXISTS ${ident}`);
+  await pool.query(`SET search_path TO ${ident}, public`);
+  return { schema };
+}
+
+/**
  * Run migrations once per pool (memoized). Hot paths (POST /tape, GET /tape) used to
  * re-run CREATE TABLE IF NOT EXISTS + SELECT schema_migrations on every request.
  * A failed attempt is forgotten so the next request retries.
@@ -450,7 +465,7 @@ async function ensurePostgresMigrations(pool) {
   const prior = migrationsDone.get(pool);
   if (prior) {
     const done = await prior;
-    return { ok: true, applied: [], latest: done.latest, cached: true };
+    return { ok: true, applied: [], latest: done.latest, cached: true, schema: done.schema };
   }
   const run = applyPostgresMigrations(pool);
   migrationsDone.set(pool, run);
@@ -463,6 +478,7 @@ async function ensurePostgresMigrations(pool) {
 }
 
 async function applyPostgresMigrations(pool) {
+  const { schema } = await ensurePostgresSchema(pool);
   await pool.query(schemaMigrationsDdl());
   const { rows } = await pool.query("SELECT version FROM schema_migrations");
   const have = new Set((rows || []).map((r) => Number(r.version)));
@@ -476,7 +492,12 @@ async function applyPostgresMigrations(pool) {
     );
     applied.push(mig.version);
   }
-  return { ok: true, applied, latest: PG_MIGRATIONS[PG_MIGRATIONS.length - 1]?.version || 0 };
+  return {
+    ok: true,
+    applied,
+    latest: PG_MIGRATIONS[PG_MIGRATIONS.length - 1]?.version || 0,
+    schema: schema || null,
+  };
 }
 
 const SNAPSHOT_UPSERT_SQL = `INSERT INTO tape_snapshots
@@ -805,6 +826,7 @@ module.exports = {
   postgresSchema,
   schemaMigrationsDdl,
   PG_MIGRATIONS,
+  ensurePostgresSchema,
   ensurePostgresMigrations,
   writePostgres,
   suggestPostgres,

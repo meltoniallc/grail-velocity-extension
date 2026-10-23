@@ -2,6 +2,9 @@
 
 const crypto = require("node:crypto");
 
+/** Default schema when Tape shares meltonia-automation Postgres (additive, isolated). */
+const DEFAULT_SHARED_PG_SCHEMA = "grail_tape";
+
 /**
  * Bind loopback for `npm run tape` on a desk. Railway injects
  * RAILWAY_ENVIRONMENT; the proxy can only reach 0.0.0.0.
@@ -17,12 +20,43 @@ function listenHost(env = process.env) {
 }
 
 /**
+ * Optional dedicated Postgres schema for Tape tables.
+ * Empty = default search_path (public). Set PG_SCHEMA=grail_tape when
+ * DATABASE_URL points at meltonia-automation's Postgres so verified_prices /
+ * tape_snapshots never collide with event-spine or other app tables.
+ * PG_SCHEMA=public (or "-") forces the default schema even if a shared URL is used.
+ */
+function postgresSchemaName(env = process.env) {
+  const raw = String(env.PG_SCHEMA != null ? env.PG_SCHEMA : "").trim();
+  if (!raw || raw === "-" || raw.toLowerCase() === "public") return "";
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(raw)) {
+    throw new Error("PG_SCHEMA must be a plain SQL identifier (letters, digits, _)");
+  }
+  return raw.toLowerCase();
+}
+
+/** Double-quote a validated identifier for DDL / SET search_path. */
+function quotePgIdent(name) {
+  const schema = String(name || "");
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(schema)) {
+    throw new Error("invalid Postgres identifier");
+  }
+  return `"${schema.replace(/"/g, '""')}"`;
+}
+
+/**
  * Railway's postgres-ssl image presents a self-signed cert.
  * node-pg treats sslmode=require as verify-full unless rejectUnauthorized is false.
  * Local URLs and sslmode=disable stay plaintext.
+ * When PG_SCHEMA is set, every pooled connection starts with that search_path.
  */
-function postgresPoolOptions(connectionString, extra = {}) {
+function postgresPoolOptions(connectionString, extra = {}, env = process.env) {
   const options = { connectionString, max: 4, ...extra };
+  const schema = postgresSchemaName(env);
+  if (schema) {
+    const prior = options.options ? `${String(options.options).trim()} ` : "";
+    options.options = `${prior}-c search_path=${schema},public`.trim();
+  }
   let host = "";
   let sslmode = "";
   try {
@@ -54,4 +88,11 @@ function secretMatches(expected, headerValue) {
   return crypto.timingSafeEqual(given, want);
 }
 
-module.exports = { listenHost, postgresPoolOptions, secretMatches };
+module.exports = {
+  listenHost,
+  postgresPoolOptions,
+  postgresSchemaName,
+  quotePgIdent,
+  secretMatches,
+  DEFAULT_SHARED_PG_SCHEMA,
+};

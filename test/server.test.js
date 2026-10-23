@@ -9,7 +9,14 @@ const { spawn } = require("node:child_process");
 const { loadScripts } = require("./load-core");
 
 const { GV } = loadScripts(["lib/core.js"]);
-const { listenHost, postgresPoolOptions, secretMatches } = require("../server/runtime");
+const {
+  listenHost,
+  postgresPoolOptions,
+  postgresSchemaName,
+  quotePgIdent,
+  secretMatches,
+  DEFAULT_SHARED_PG_SCHEMA,
+} = require("../server/runtime");
 
 function tapeEnv(extra) {
   return {
@@ -345,23 +352,46 @@ test("listen host stays loopback unless Railway or TAPE_HOST says otherwise", ()
 });
 
 test("railway postgres pool accepts the self-signed cert", () => {
-  const local = postgresPoolOptions("postgres://u:p@127.0.0.1:5432/grail");
+  const local = postgresPoolOptions("postgres://u:p@127.0.0.1:5432/grail", {}, {});
   assert.equal(local.ssl, undefined);
+  assert.equal(local.options, undefined);
   const disabled = postgresPoolOptions(
     "postgresql://u:p@postgres.railway.internal:5432/railway?sslmode=disable",
+    {},
+    {},
   );
   assert.equal(disabled.ssl, undefined);
   const pub = postgresPoolOptions(
     "postgresql://u:p@example.proxy.rlwy.net:45568/railway?sslmode=require",
+    {},
+    {},
   );
   assert.deepEqual(pub.ssl, { rejectUnauthorized: false });
-  const internal = postgresPoolOptions("postgresql://u:p@postgres.railway.internal:5432/railway", {
-    max: 8,
-    keepAlive: true,
-  });
+  const internal = postgresPoolOptions(
+    "postgresql://u:p@postgres.railway.internal:5432/railway",
+    { max: 8, keepAlive: true },
+    {},
+  );
   assert.equal(internal.max, 8);
   assert.equal(internal.keepAlive, true);
   assert.deepEqual(internal.ssl, { rejectUnauthorized: false });
+});
+
+test("PG_SCHEMA pins search_path for shared automation Postgres", () => {
+  assert.equal(DEFAULT_SHARED_PG_SCHEMA, "grail_tape");
+  assert.equal(postgresSchemaName({}), "");
+  assert.equal(postgresSchemaName({ PG_SCHEMA: "" }), "");
+  assert.equal(postgresSchemaName({ PG_SCHEMA: "public" }), "");
+  assert.equal(postgresSchemaName({ PG_SCHEMA: "grail_tape" }), "grail_tape");
+  assert.equal(quotePgIdent("grail_tape"), '"grail_tape"');
+  assert.throws(() => postgresSchemaName({ PG_SCHEMA: "grail-tape" }), /identifier/);
+  const shared = postgresPoolOptions(
+    "postgresql://u:p@centerbeam.proxy.rlwy.net:19901/railway?sslmode=require",
+    { max: 2 },
+    { PG_SCHEMA: "grail_tape" },
+  );
+  assert.match(shared.options, /search_path=grail_tape,public/);
+  assert.deepEqual(shared.ssl, { rejectUnauthorized: false });
 });
 
 test("Railway refuses to boot without TAPE_SECRET and does not print a generated secret", async () => {

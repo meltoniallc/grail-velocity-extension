@@ -359,11 +359,10 @@ test("content script and side panel call extracted overlay helpers", () => {
   assert.match(optsHtml, /id="scratchRemote"/);
   assert.match(optsHtml, /id="scratchList"/);
   assert.match(optsHtml, /id="syncStatus"/);
-  assert.match(optsHtml, /id="presetRailway"/);
-  assert.match(optsHtml, /id="presetLocal"/);
-  assert.match(optsHtml, /Use Railway Tape/);
-  assert.match(optsJs, /presetRailway/);
-  assert.match(optsJs, /tapeApiPresets/);
+  assert.doesNotMatch(optsHtml, /id="presetRailway"|id="presetLocal"|id="tapeSecret"/);
+  assert.match(optsHtml, /no secret paste/i);
+  assert.match(optsHtml, /meltonia-defaults\.js/);
+  assert.match(optsJs, /seedMeltoniaTapeDefaults|resolveTapeSettings/);
   assert.match(optsJs, /optionsFocus/);
   assert.match(optsJs, /GV_SCRATCH_GET/);
   assert.match(optsJs, /GV_SCRATCH_REMOTE/);

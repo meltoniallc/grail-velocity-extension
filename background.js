@@ -1,5 +1,6 @@
 importScripts(
   "lib/core.js",
+  "lib/meltonia-defaults.js",
   "lib/tape.js",
   "lib/sync.js",
   "lib/cardfields.js",
@@ -67,9 +68,10 @@ const outbox = globalThis.GVSync.createOutbox({
   onSent: () => remoteSuggestCache.clear(),
 });
 
-/** Worker start: drain anything left from a suspended worker and warm the socket. */
+/** Worker start: seed Meltonia Tape defaults, drain outbox, warm the socket. */
 (async () => {
   try {
+    await globalThis.GV.seedMeltoniaTapeDefaults(local, { force: false });
     outbox.flush();
     const cfg = await tapeEndpoint();
     if (cfg) timedFetch(`${cfg.endpoint}/health`, {}, PULL_TIMEOUT_MS).catch(() => {});
@@ -82,6 +84,8 @@ chrome.runtime.onInstalled.addListener(() => {
   if (chrome.sidePanel?.setPanelBehavior) {
     chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: false }).catch(() => {});
   }
+  // Meltonia zip bake wins on install/update — no Options paste.
+  globalThis.GV.seedMeltoniaTapeDefaults(local, { force: true }).catch(() => {});
 });
 
 function chromeAdapter() {
