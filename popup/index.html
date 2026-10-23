@@ -10,6 +10,7 @@
     <header>
       <h1>Grail Velocity</h1>
       <p id="capture-note" role="status">Pages you open. No crawling.</p>
+      <p id="desk-status" class="desk-status" data-desk="watching" role="status"></p>
     </header>
     <section class="capture" aria-label="Capture">
       <div class="metrics">
@@ -18,6 +19,20 @@
         <p id="server">Local</p>
       </div>
       <p id="last" class="last">No capture yet</p>
+      <div class="roles" id="roles" aria-label="Fast-Cash · listed ask · book ref" hidden>
+        <div class="role tape" data-role="tape">
+          <p class="role-kicker">Fast-Cash</p>
+          <p class="role-value" id="role-tape">—</p>
+        </div>
+        <div class="role ask" data-role="ask">
+          <p class="role-kicker">Listed ask</p>
+          <p class="role-value" id="role-ask">—</p>
+        </div>
+        <div class="role book" data-role="book">
+          <p class="role-kicker">Book ref</p>
+          <p class="role-value" id="role-book">—</p>
+        </div>
+      </div>
       <div class="switches">
         <label class="switch"><input id="capture-on" type="checkbox" checked /> Capture</label>
         <label class="switch"><input id="site-ebay" type="checkbox" checked /> eBay</label>
@@ -32,13 +47,14 @@
       <button type="submit">Sold tape</button>
     </form>
     <ul id="suggest" hidden></ul>
-    <p class="sec" id="sec">High-conf cuts</p>
+    <p class="sec" id="sec">Cut queue</p>
     <ul id="cuts"></ul>
     <footer>
       <button type="button" id="read">Scrape this page</button>
       <button type="button" id="panel" class="ghost">Side panel</button>
     </footer>
     <script src="../lib/core.js"></script>
+    <script src="../lib/overlay.js"></script>
     <script src="../lib/suggest.js"></script>
     <script src="../lib/observe.js"></script>
     <script src="popup.js"></script>
