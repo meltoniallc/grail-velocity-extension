@@ -76,6 +76,8 @@ CardSight writes cards, comps (`source=cardsight`), and sku mappings. The Mascot
 
 Hosted Tape is `https://tape-production-2810.up.railway.app` only. Options → **Use Railway Tape** fills that URL (paste `TAPE_SECRET` from the Railway `tape` service). **Use local Tape** fills `http://127.0.0.1:8787`. The extension will not send the shared secret to any other host. `TAPE_SECRET` is not printed by the Railway process. `DATABASE_URL` stays on the service, not in the extension.
 
+Shared Meltonia Postgres: point the Railway `tape` service `DATABASE_URL` at the same Postgres meltonia-automation already runs (event-spine / pgvector host), and set `PG_SCHEMA=grail_tape`. Tape creates that schema and keeps `verified_prices` / `tape_snapshots` / observe tables there — additive only; it does not drop or rewrite other schemas. Scratch stays SQLite on the Tape service. Meltonia still pastes one Tape secret in Options (URL is already the Railway default).
+
 ## Performance (2.0.1)
 
 - Capture answers the overlay as soon as Chrome tape is written; `POST /tape` goes through a persisted

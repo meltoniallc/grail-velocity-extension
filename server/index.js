@@ -14,11 +14,20 @@ const {
 } = require("./store");
 const { ingestObservations, searchObservations } = require("./observe");
 const { resolveSecret } = require("./secret");
-const { listenHost, postgresPoolOptions, secretMatches } = require("./runtime");
+const { listenHost, postgresPoolOptions, postgresSchemaName, secretMatches } = require("./runtime");
 
 const PORT = Number(process.env.PORT || 8787);
 const SQLITE_PATH = process.env.SQLITE_PATH || path.join(__dirname, "..", "data", "scratch.sqlite");
 const DATABASE_URL = process.env.DATABASE_URL || "";
+const PG_SCHEMA = (() => {
+  try {
+    return postgresSchemaName(process.env);
+  } catch (err) {
+    process.stderr.write(`${err.message}\n`);
+    process.exit(1);
+    return "";
+  }
+})();
 const MAX_BODY_BYTES = 1_000_000;
 const secretInfo = resolveSecret({
   env: process.env,
@@ -118,7 +127,11 @@ const server = http.createServer(async (req, res) => {
       return;
     }
     if (req.method === "GET" && url.pathname === "/ping") {
-      send(res, 200, { ok: true, postgres: Boolean(pool) });
+      send(res, 200, {
+        ok: true,
+        postgres: Boolean(pool),
+        ...(PG_SCHEMA ? { schema: PG_SCHEMA } : {}),
+      });
       return;
     }
     if (req.method === "GET" && url.pathname === "/suggest") {
@@ -209,8 +222,9 @@ if (require.main === module) {
     const secretLine = railway
       ? "Tape secret is the TAPE_SECRET variable on this service (not printed).\n"
       : `Paste this secret in Grail Velocity Options:\n${TAPE_SECRET}\n(source: ${secretInfo.source}, file: ${secretInfo.filePath})\n`;
+    const pgLabel = !pool ? "off" : PG_SCHEMA ? `on schema ${PG_SCHEMA}` : "on";
     process.stderr.write(
-      `Grail Velocity tape on http://${host}:${port} (postgres ${pool ? "on" : "off"}, sqlite ${SQLITE_PATH})\n${secretLine}Then: Tape API http://${host}:${port} → Save → Check connection.\n`,
+      `Grail Velocity tape on http://${host}:${port} (postgres ${pgLabel}, sqlite ${SQLITE_PATH})\n${secretLine}Then: Tape API http://${host}:${port} → Save → Check connection.\n`,
     );
   });
 }

@@ -13,6 +13,7 @@ const {
   scratchBucket,
   tapeQueryNorm,
   SCRATCH_TTL_MS,
+  ensurePostgresSchema,
   ensurePostgresMigrations,
   PG_MIGRATIONS,
   schemaMigrationsDdl,
@@ -252,6 +253,23 @@ test("getTapePostgres returns snapshot + verified_prices for one query_norm", as
   assert.ok(applied.has(1), "pull path runs additive migrations first");
 });
 
+test("ensurePostgresSchema is a no-op without PG_SCHEMA and creates grail_tape when set", async () => {
+  const sqlLog = [];
+  const pool = {
+    async query(sql) {
+      sqlLog.push(String(sql));
+      return { rows: [] };
+    },
+  };
+  const none = await ensurePostgresSchema(pool, {});
+  assert.equal(none.schema, null);
+  assert.equal(sqlLog.length, 0);
+  const created = await ensurePostgresSchema(pool, { PG_SCHEMA: "grail_tape" });
+  assert.equal(created.schema, "grail_tape");
+  assert.ok(sqlLog.some((s) => /CREATE SCHEMA IF NOT EXISTS "grail_tape"/i.test(s)));
+  assert.ok(sqlLog.some((s) => /SET search_path TO "grail_tape", public/i.test(s)));
+});
+
 test("ensurePostgresMigrations applies v1-v4 once and is idempotent", async () => {
   assert.ok(PG_MIGRATIONS.length >= 1);
   assert.equal(PG_MIGRATIONS[0].version, 1);
@@ -279,6 +297,7 @@ test("ensurePostgresMigrations applies v1-v4 once and is idempotent", async () =
   assert.equal(first.ok, true);
   assert.deepEqual(first.applied, [1, 2, 3, 4]);
   assert.equal(first.latest, 4);
+  assert.equal(first.schema, null);
 
   const second = await ensurePostgresMigrations(pool);
   assert.equal(second.ok, true);
