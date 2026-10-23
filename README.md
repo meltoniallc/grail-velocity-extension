@@ -4,7 +4,9 @@ Chromium MV3 overlay. Reads eBay sold tape as you. Fast-Cash is **sold tape only
 
 ## Status
 
-**v2.0.3** — Options **Use Railway Tape** preset (`https://tape-production-2810.up.railway.app`), desk SYNC FAIL banner, cliff → Inspect scratch. Invariants unchanged (Fast-Cash/Postgres = verified solds; live → scratch; typeahead never opens sold tabs).
+**v2.0.4** — NO TAPE desk primary **Get solds** (open/focus sold search + scrape/auto-capture). Invariants unchanged (Fast-Cash/Postgres = verified solds; live → scratch; typeahead never opens sold tabs).
+
+**v2.0.3** — Options **Use Railway Tape** preset (`https://tape-production-2810.up.railway.app`), desk SYNC FAIL banner, cliff → Inspect scratch.
 
 - Auto-capture once per page view on item (`/itm/`), sold search (`LH_Sold=1`), and active search. It does not crawl, paginate, or open tabs.
 - One parser per page type. Seller names are stored only as HMAC-SHA256 with a secret you set in Options.

@@ -138,7 +138,7 @@
       return `Fast-Cash from ${soldKept.length} sold comps. Live asks are the list only — they never set the price.`;
     }
     if (pageRows.length) {
-      return "Scraped live asks. Open solds for comps. Live prices never set Fast-Cash.";
+      return "Scraped live asks. Get solds for comps. Live prices never set Fast-Cash.";
     }
     return GV.deskStatusLine("watching");
   }
@@ -283,16 +283,23 @@
           <p class="gv-note">${esc(cashNote())}</p>
         </div>
         <div class="gv-actions">
-          <button class="gv-btn primary scrape" type="button" data-act="scrape"${scraping ? " disabled" : ""}>
+          ${
+            fast == null
+              ? `<button class="gv-btn primary get-solds" type="button" data-act="get-solds"${scraping ? " disabled" : ""}>Get solds</button>
+          <button class="gv-btn ghost scrape" type="button" data-act="scrape"${scraping ? " disabled" : ""}>
+            ${esc(scrapeLabel())}
+          </button>`
+              : `<button class="gv-btn primary scrape" type="button" data-act="scrape"${scraping ? " disabled" : ""}>
             ${esc(scrapeLabel())}
           </button>
-          <button class="gv-btn ghost" type="button" data-act="sold">Open solds</button>
+          <button class="gv-btn ghost" type="button" data-act="sold">Open solds</button>`
+          }
           ${
             canContinueSolds
               ? `<button class="gv-btn ghost" type="button" data-act="continue-solds"${scraping || followingSoldPage ? " disabled" : ""}>Continue solds</button>`
               : ""
           }
-          <button class="gv-btn ${pageMode === "listing" ? "primary" : "ghost"}" type="button" data-act="apply"${fast == null ? " disabled" : ""}>
+          <button class="gv-btn ${pageMode === "listing" && fast != null ? "primary" : "ghost"}" type="button" data-act="apply"${fast == null ? " disabled" : ""}>
             ${applied != null ? "Applied " + GV.money(applied) : "Apply Fast-Cash"}
           </button>
           <button class="gv-btn wide" type="button" data-act="copy"${fast == null ? " disabled" : ""}>Copy price</button>
@@ -462,6 +469,10 @@
       await read({ force: true, mode: "manual" });
       return;
     }
+    if (act === "get-solds") {
+      await runGetSolds();
+      return;
+    }
     if (act === "sold") {
       const q = query || typeQuery;
       if (q) location.href = GV.soldUrl(q);
@@ -585,6 +596,45 @@
     );
     location.href = nextSoldHref;
     return true;
+  }
+
+  /** NO TAPE primary: open/focus sold search for query, then same capture path as Scrape. */
+  async function runGetSolds() {
+    const q = String(query || typeQuery || "").trim();
+    const plan = GV.planGetSolds({
+      query: q,
+      pageMode,
+      href: location.href,
+      pageQuery: GV.pageQuery(),
+    });
+    if (plan.action === "noop") {
+      setStatus("Type a card query first, then Get solds.");
+      return;
+    }
+    if (plan.action === "scrape") {
+      setStatus("Capturing solds on this page…");
+      await read({ force: true, mode: "manual" });
+      return;
+    }
+    const payload = GV.encodeGetSoldsPending(plan.query);
+    if (payload) {
+      try {
+        sessionStorage.setItem(GV.GET_SOLDS_PENDING_KEY, payload);
+      } catch {
+        /* navigation still proceeds; auto-capture may cover arrival */
+      }
+    }
+    setStatus("Opening sold search…", 4000);
+    location.href = plan.url;
+  }
+
+  /** After Get solds navigation, force the same manual capture path as Scrape. */
+  function consumePendingGetSolds() {
+    try {
+      return GV.consumeGetSoldsPending(sessionStorage, query || GV.pageQuery());
+    } catch {
+      return null;
+    }
   }
 
   async function scrapeListings() {
@@ -732,7 +782,11 @@
       followingSoldPage = false;
       scanMeta = { stoppedAt: null, nCliff: 0, nRaw: 0, nKept: 0 };
       render();
-      if (
+      const pendingGetSolds = consumePendingGetSolds();
+      if (pendingGetSolds) {
+        setOpen(true);
+        read({ force: true, mode: "manual" });
+      } else if (
         GV.shouldScheduleAutoRead(autoCapture) &&
         (GV.isSoldSearch() || GV.isSearchPage() || GV.isListingOrRevise())
       ) {
@@ -793,7 +847,11 @@
     scheduleRead();
   });
   mo.observe(document.documentElement, { childList: true, subtree: true });
-  if (
+  const pendingGetSolds = consumePendingGetSolds();
+  if (pendingGetSolds) {
+    setOpen(true);
+    await read({ force: true, mode: "manual" });
+  } else if (
     GV.shouldScheduleAutoRead(autoCapture) &&
     (GV.isSoldSearch() || GV.isSearchPage() || GV.isListingOrRevise())
   ) {
