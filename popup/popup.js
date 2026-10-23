@@ -10,12 +10,16 @@ function renderCuts(list) {
     .filter((i) => i.confidence === "High" && i.listPrice && i.fastCash)
     .sort((a, b) => b.listPrice - b.fastCash - (a.listPrice - a.fastCash))
     .slice(0, 17);
-  paintRows(high, "High-conf cuts");
+  paintRows(high, "Cut queue");
 }
 
 function paintRows(list, label) {
   document.getElementById("sec").textContent = label;
   const ul = document.getElementById("cuts");
+  if (!list.length) {
+    ul.innerHTML = `<li class="empty">${esc(GV.DESK_EMPTY.noTape)} Open solds from a title, or wait for auto-capture.</li>`;
+    return;
+  }
   ul.innerHTML = list
     .map((i) => {
       const gap = (i.listPrice || 0) - (i.fastCash || 0);
@@ -23,7 +27,7 @@ function paintRows(list, label) {
         <button class="row" type="button" data-q="${esc(i.query || soldQuery(i.title))}">
           <div>
             <div class="title">${esc(i.title)}</div>
-            <div class="meta">${esc(i.id || i.kind || "tape")} · ${money(i.listPrice)} → ${money(i.fastCash)}</div>
+            <div class="meta">${esc(GV.deskRoleLabel("ask"))} ${money(i.listPrice)} → ${esc(GV.deskRoleLabel("tape"))} ${money(i.fastCash)}</div>
           </div>
           <div class="gap">${i.kind === "tape" ? money(i.fastCash) : money(gap)}</div>
         </button>
@@ -46,7 +50,7 @@ function paintSuggest(hits) {
         <button class="row" type="button" data-q="${esc(hit.query || hit.title)}">
           <div>
             <div class="title">${esc(hit.title)}</div>
-            <div class="meta">${esc(hit.kind || hit.status || "comp")} · ${hit.nKept ? hit.nKept + " kept" : hit.soldDate || hit.pageType || "book"}</div>
+            <div class="meta">${esc(GV.suggestMetaLabel(hit))}</div>
           </div>
           <div class="gap">${money(hit.fastCash ?? hit.price)}</div>
         </button>
@@ -67,6 +71,45 @@ function esc(s) {
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/"/g, "&quot;");
+}
+
+function paintDeskStatus(lastRead) {
+  const el = document.getElementById("desk-status");
+  if (!el) return;
+  const line = GV.deskSurfaceLine({ lastRead });
+  el.textContent = line;
+  el.dataset.desk =
+    line === GV.DESK_EMPTY.cliff
+      ? "cliff"
+      : line === GV.DESK_EMPTY.noTape
+        ? "no-tape"
+        : line === GV.DESK_EMPTY.scraped
+          ? "scraped"
+          : "watching";
+}
+
+function paintRoles(lastRead, catalogHit) {
+  const wrap = document.getElementById("roles");
+  if (!wrap) return;
+  const fast = lastRead?.fastCash ?? null;
+  const book = catalogHit?.fastCash ?? null;
+  const ask = catalogHit?.listPrice ?? null;
+  const show = fast != null || book != null || ask != null || lastRead?.at;
+  wrap.hidden = !show;
+  if (!show) return;
+  const tapeEl = document.getElementById("role-tape");
+  const askEl = document.getElementById("role-ask");
+  const bookEl = document.getElementById("role-book");
+  if (tapeEl) {
+    tapeEl.textContent = fast != null ? money(fast) : "—";
+    tapeEl.classList.toggle("none", fast == null);
+  }
+  if (askEl) askEl.textContent = ask != null ? money(ask) : "—";
+  if (bookEl) bookEl.textContent = book != null ? money(book) : "—";
+  wrap.querySelectorAll(".role-kicker").forEach((node) => {
+    const role = node.parentElement?.getAttribute("data-role");
+    if (role) node.textContent = GV.deskRoleLabel(role);
+  });
 }
 
 function paintCapture(status) {
@@ -186,6 +229,19 @@ document.getElementById("pause-1h").addEventListener("click", async () => {
 async function initPopup() {
   items = await GV.loadCatalog();
   renderCuts(items);
+  let lastRead = null;
+  try {
+    const bag = await chrome.storage.local.get("lastRead");
+    lastRead = bag.lastRead || null;
+  } catch {
+    /* ignore */
+  }
+  paintDeskStatus(lastRead);
+  const catalogHit =
+    lastRead?.query && items.length
+      ? items.find((i) => String(i.title || "").toLowerCase().includes(String(lastRead.query).slice(0, 24).toLowerCase()))
+      : null;
+  paintRoles(lastRead, catalogHit || null);
   try {
     paintCapture(await chrome.runtime.sendMessage({ type: "GV_CAPTURE_STATUS" }));
   } catch {

@@ -16,6 +16,17 @@ body.panel ul { max-height: none; }
   line-height: 1.45;
   color: var(--subtle);
 }
+.kicker {
+  margin: 0;
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.cut-roles {
+  margin: 10px 0 0;
+}
+.cut-roles .role.book { display: none; }
 .toolbar {
   padding: 0 16px 8px;
 }

@@ -7,12 +7,12 @@ function paint(list, label) {
   const n = list.length;
   if (meta) {
     meta.textContent = n
-      ? `${n} in queue${label ? " · " + label : ""}`
-      : "No cuts match — widen search or refresh the catalog.";
+      ? `${n} in cut queue${label ? " · " + label : ""}`
+      : GV.DESK_EMPTY.noTape;
   }
 
   if (!n) {
-    ul.innerHTML = `<li class="empty">Nothing in the cut queue. Type for instant tape, or open solds from a title. Fast-Cash stays sold tape only.</li>`;
+    ul.innerHTML = `<li class="empty">${esc(GV.DESK_EMPTY.watching)} Type for instant tape, or open solds from a title. Cut queue is list→Fast-Cash gaps only.</li>`;
     return;
   }
 
@@ -21,13 +21,15 @@ function paint(list, label) {
     .map((i) => {
       const gap = (i.listPrice || 0) - (i.fastCash || 0);
       const q = i.query || i.title;
+      const ask = i.listPrice;
+      const tape = i.fastCash;
       return `<li>
         <button class="row" type="button" data-q="${esc(q)}">
           <div>
             <div class="title">${esc(i.title)}</div>
-            <div class="meta">${esc(i.id || i.kind || "—")} · ${i.nKept ? i.nKept + " kept" : i.confidence || "—"} · ${GV.money(i.listPrice)} → ${GV.money(i.fastCash)}</div>
+            <div class="meta">${esc(GV.suggestMetaLabel(i))} · ${esc(GV.deskRoleLabel("ask"))} ${GV.money(ask)} → ${esc(GV.deskRoleLabel("tape"))} ${GV.money(tape)}</div>
           </div>
-          <div class="gap">${i.kind === "tape" ? GV.money(i.fastCash) : GV.money(gap)}</div>
+          <div class="gap">${i.kind === "tape" ? GV.money(tape) : GV.money(gap)}</div>
         </button>
       </li>`;
     })
@@ -45,15 +47,56 @@ function rank(list) {
   return GV.rankCuts(list);
 }
 
+function paintDeskStatus(lastRead) {
+  const el = document.getElementById("desk-status");
+  if (!el) return;
+  const line = GV.deskSurfaceLine({ lastRead });
+  el.textContent = line;
+  el.dataset.desk =
+    line === GV.DESK_EMPTY.cliff
+      ? "cliff"
+      : line === GV.DESK_EMPTY.noTape
+        ? "no-tape"
+        : line === GV.DESK_EMPTY.scraped
+          ? "scraped"
+          : "watching";
+}
+
+function paintRoles(lastRead, topCut) {
+  const wrap = document.getElementById("roles");
+  if (!wrap) return;
+  const fast = lastRead?.fastCash ?? topCut?.fastCash ?? null;
+  const ask = topCut?.listPrice ?? null;
+  const show = fast != null || ask != null || lastRead?.at;
+  wrap.hidden = !show;
+  if (!show) return;
+  const tapeEl = document.getElementById("role-tape");
+  const askEl = document.getElementById("role-ask");
+  if (tapeEl) {
+    tapeEl.textContent = fast != null ? GV.money(fast) : "—";
+    tapeEl.classList.toggle("none", fast == null);
+  }
+  if (askEl) askEl.textContent = ask != null ? GV.money(ask) : "—";
+  wrap.querySelectorAll(".role-kicker").forEach((node) => {
+    const role = node.parentElement?.getAttribute("data-role");
+    if (role) node.textContent = GV.deskRoleLabel(role);
+  });
+}
+
 async function paintLastRead() {
   const el = document.getElementById("last");
   if (!el) return;
+  let lastRead = null;
   try {
-    const { lastRead } = await chrome.storage.local.get("lastRead");
+    const bag = await chrome.storage.local.get("lastRead");
+    lastRead = bag.lastRead || null;
     el.textContent = GV.formatLastRead(lastRead, Date.now());
   } catch {
     el.textContent = "Could not load last read status.";
   }
+  paintDeskStatus(lastRead);
+  const top = rank(items)[0] || null;
+  paintRoles(lastRead, top);
 }
 
 let typeGen = 0;
@@ -72,12 +115,12 @@ async function onTyped() {
     return;
   }
   const tok = GV.tokenize(q);
-  const bookHits = items
+  const queueHits = items
     .map((item) => ({ item, score: GV.overlapScore(tok, `${item.title} ${item.player || ""}`) }))
     .filter((x) => x.score > 0.18)
     .sort((a, b) => b.score - a.score)
     .map((x) => x.item);
-  paint(bookHits, "search");
+  paint(queueHits, "queue search");
 }
 
 document.getElementById("cuts").addEventListener("click", (e) => {

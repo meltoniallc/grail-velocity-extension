@@ -4,7 +4,9 @@ Chromium MV3 overlay. Reads eBay sold tape as you. Fast-Cash is **sold tape only
 
 ## Status
 
-**v2.0.4** — NO TAPE desk primary **Get solds** (open/focus sold search + scrape/auto-capture). Invariants unchanged (Fast-Cash/Postgres = verified solds; live → scratch; typeahead never opens sold tabs).
+**v2.1.0** — RC polish: shared watching / cliff / NO TAPE copy on overlay · popup · side panel; stronger Fast-Cash · listed ask · book ref hierarchy; side panel = cut queue only (no book mental model). Invariants unchanged.
+
+**v2.0.4** — NO TAPE desk primary **Get solds** (open/focus sold search + scrape/auto-capture).
 
 **v2.0.3** — Options **Use Railway Tape** preset (`https://tape-production-2810.up.railway.app`), desk SYNC FAIL banner, cliff → Inspect scratch.
 

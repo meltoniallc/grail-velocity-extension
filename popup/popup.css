@@ -158,12 +158,85 @@ button.ghost, li button.row {
 button:hover { background: color-mix(in srgb, var(--gold) 88%, white); }
 button.ghost:hover, li button.row:hover { background: var(--raised); }
 
+.desk-status {
+  margin: 8px 0 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--muted);
+  letter-spacing: 0.02em;
+}
+.desk-status[data-desk="cliff"] { color: #c4a46a; }
+.desk-status[data-desk="no-tape"] { color: #c4a46a; }
+.desk-status[data-desk="scraped"] { color: var(--teal); }
+
+.roles {
+  display: grid;
+  gap: 6px;
+  margin-top: 10px;
+}
+.role {
+  padding: 8px 10px;
+  border-radius: 2px;
+  background: var(--raised);
+  border-left: 3px solid var(--line);
+}
+.role.tape {
+  border-left-width: 4px;
+  border-left-color: var(--teal);
+  background: color-mix(in srgb, var(--teal) 12%, var(--carbon));
+  padding: 10px 12px;
+}
+.role.ask { border-left-color: var(--danger); }
+.role.book {
+  border-left-width: 2px;
+  border-left-color: var(--muted);
+  opacity: 0.78;
+  padding: 6px 10px;
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.role-kicker {
+  margin: 0;
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.role.tape .role-kicker { color: var(--teal); font-weight: 600; }
+.role.ask .role-kicker { color: var(--danger); }
+.role.book .role-kicker { font-size: 9px; color: var(--muted); font-weight: 400; }
+.role-value {
+  margin: 2px 0 0;
+  font-family: "DM Mono", ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+  font-size: 14px;
+}
+.role.tape .role-value {
+  font-family: "Bebas Neue", sans-serif;
+  font-size: 28px;
+  letter-spacing: 0.02em;
+  color: var(--platinum);
+  line-height: 1;
+}
+.role.tape .role-value.none { color: #c4a46a; }
+.role.ask .role-value { color: var(--danger); font-size: 13px; }
+.role.book .role-value { color: var(--muted); font-size: 11px; }
+
 .sec {
   margin: 0 14px;
   font-size: 12px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--muted);
+}
+li.empty {
+  margin: 8px;
+  padding: 12px;
+  border-radius: 2px;
+  background: var(--carbon);
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
 }
 ul {
   list-style: none;

@@ -11,8 +11,19 @@
     <header>
       <p class="kicker">Side panel · cut queue</p>
       <h1>Cut queue</h1>
-      <p class="hint">Fast-Cash is sold tape only. Catalog cuts below are list→tape gaps — not book dressed as Fast-Cash.</p>
+      <p class="hint">List → Fast-Cash gaps only. Sold tape sets the price — catalog never Applies.</p>
+      <p id="desk-status" class="desk-status" data-desk="watching" role="status"></p>
       <p id="last" class="status"></p>
+      <div class="roles cut-roles" id="roles" aria-label="Fast-Cash · listed ask" hidden>
+        <div class="role tape" data-role="tape">
+          <p class="role-kicker">Fast-Cash</p>
+          <p class="role-value" id="role-tape">—</p>
+        </div>
+        <div class="role ask" data-role="ask">
+          <p class="role-kicker">Listed ask</p>
+          <p class="role-value" id="role-ask">—</p>
+        </div>
+      </div>
       <p id="meta" class="status muted"></p>
     </header>
     <form id="search">

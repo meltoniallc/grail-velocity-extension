@@ -257,19 +257,19 @@
               ? `<p class="gv-note">Live/listing asks stay off the sold tape. Fast-Cash only moves after sold comps exist.</p>`
               : ""
           }
-          <div class="gv-roles">
+          <div class="gv-roles" aria-label="Fast-Cash · listed ask · book ref">
             <div class="gv-role gv-role-tape" data-role="tape">
-              <p class="gv-role-kicker">Fast-Cash <span class="gv-src${fast == null ? " none" : ""}">${esc(tapeChip)}</span></p>
+              <p class="gv-role-kicker">${esc(GV.deskRoleLabel("tape"))} <span class="gv-src${fast == null ? " none" : ""}">${esc(tapeChip)}</span></p>
               <p class="gv-role-value gv-fast">${GV.money(fast)}</p>
               <p class="gv-role-hint">${esc(tapeHint)}</p>
             </div>
             <div class="gv-role gv-role-ask" data-role="ask">
-              <p class="gv-role-kicker">Listed ask</p>
+              <p class="gv-role-kicker">${esc(GV.deskRoleLabel("ask"))}</p>
               <p class="gv-role-value">${listed != null ? GV.money(listed) : "—"}</p>
               <p class="gv-role-hint">${pageMode === "sold" ? "Sold search — no live ask on this page." : "Live BIN/ask on this page. Never sets Fast-Cash."}</p>
             </div>
             <div class="gv-role gv-role-book" data-role="book">
-              <p class="gv-role-kicker">Book ref</p>
+              <p class="gv-role-kicker">${esc(GV.deskRoleLabel("book"))}</p>
               <p class="gv-role-value">${bookRef != null ? GV.money(bookRef) : "—"}</p>
               <p class="gv-role-hint">Catalog only — not sold tape. Do not Apply.</p>
             </div>
