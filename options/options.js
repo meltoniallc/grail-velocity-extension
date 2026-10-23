@@ -12,24 +12,6 @@ function setStatus(text, kind) {
   el.className = kind || "";
 }
 
-function mintSecret() {
-  const bytes = new Uint8Array(24);
-  crypto.getRandomValues(bytes);
-  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
-}
-
-function npmCommand() {
-  return globalThis.GV.npmTapeCommand(secretValue());
-}
-
-function pauseLines() {
-  return document
-    .getElementById("pause-list")
-    .value.split(/\n+/)
-    .map((line) => line.trim())
-    .filter(Boolean);
-}
-
 function paintSync(sync) {
   const el = document.getElementById("syncStatus");
   if (!el || !globalThis.GV?.formatTapeSync) return;
@@ -46,6 +28,8 @@ async function applyOptionsFocus(focus) {
   const q = String(focus.pullQuery || "").trim();
   if (q) document.getElementById("pullQuery").value = q;
   await chrome.storage.local.remove("optionsFocus");
+  const tools = document.querySelector("details.tools");
+  if (tools && (focus.inspectScratch || q)) tools.open = true;
   if (focus.inspectScratch && q) {
     await inspectScratch(focus.inspectScratch === "remote");
   } else if (q) {
@@ -58,7 +42,6 @@ async function load() {
   const data = await chrome.storage.local.get([
     "tapeApi",
     "tapeSecret",
-    "captureSettings",
     "autoCapture",
     "tapeSync",
     "optionsFocus",
@@ -67,13 +50,13 @@ async function load() {
   document.getElementById("tapeSecret").value = data.tapeSecret || "";
   document.getElementById("autoCapture").checked = globalThis.GV.autoCaptureEnabled(data.autoCapture);
   paintSync(data.tapeSync);
-  const prefs = data.captureSettings || {};
-  document.getElementById("capture-on").checked = prefs.captureEnabled !== false;
-  document.getElementById("site-ebay").checked = !prefs.sites || prefs.sites.ebay !== false;
-  const patterns = Array.isArray(prefs.pausePatterns) ? prefs.pausePatterns : globalThis.GVObserve.DEFAULT_PAUSE_PATTERNS;
-  document.getElementById("pause-list").value = patterns.join("\n");
-  document.getElementById("seller-secret").value = prefs.sellerHmacSecret || "";
-  document.getElementById("own-seller").value = prefs.ownSellerId || "";
+  try {
+    const ver = chrome.runtime.getManifest().version;
+    const el = document.getElementById("ext-ver");
+    if (el && ver) el.textContent = ver;
+  } catch {
+    /* options still works offline of manifest */
+  }
   await applyOptionsFocus(data.optionsFocus);
 }
 
@@ -91,15 +74,17 @@ async function applyPreset(kind) {
   );
 }
 
-async function saveCapture() {
+/**
+ * Desk Options exposes one capture control. Keep eBay on and captureEnabled
+ * aligned with auto-capture so gate() and overlay schedule stay in sync.
+ * Advanced capture prefs stay in storage/code defaults — Options does not edit them.
+ */
+async function saveCaptureAligned(autoCapture) {
   return chrome.runtime.sendMessage({
     type: "GV_CAPTURE_SETTINGS",
     patch: {
-      captureEnabled: document.getElementById("capture-on").checked,
-      sites: { ebay: document.getElementById("site-ebay").checked },
-      pausePatterns: pauseLines(),
-      sellerHmacSecret: document.getElementById("seller-secret").value.trim(),
-      ownSellerId: document.getElementById("own-seller").value.trim(),
+      captureEnabled: autoCapture !== false,
+      sites: { ebay: true },
     },
   });
 }
@@ -108,48 +93,24 @@ async function save() {
   const tapeApi = apiUrl();
   if (tapeApi && !globalThis.GV.tapeApiAllowed(tapeApi)) {
     const presets = globalThis.GV.tapeApiPresets();
-    setStatus(`Tape API must be ${presets.local} or ${presets.railway}.`, "bad");
+    setStatus(`Tape URL must be ${presets.local} or ${presets.railway}.`, "bad");
     return false;
   }
   const tapeSecret = secretValue();
   const autoCapture = document.getElementById("autoCapture").checked;
   await chrome.storage.local.set({ tapeApi, tapeSecret, autoCapture });
-  await saveCapture();
+  await saveCaptureAligned(autoCapture);
   return true;
 }
 
 document.getElementById("opts").addEventListener("submit", async (e) => {
   e.preventDefault();
   if (!(await save())) return;
-  setStatus("Saved. Reload eBay tabs if the API URL changed.", "ok");
+  setStatus("Saved. Reload eBay tabs if the Tape URL changed.", "ok");
 });
 
 document.getElementById("presetRailway").addEventListener("click", () => applyPreset("railway"));
 document.getElementById("presetLocal").addEventListener("click", () => applyPreset("local"));
-
-document.getElementById("mint").addEventListener("click", async () => {
-  document.getElementById("tapeSecret").value = mintSecret();
-  if (!(await save())) return;
-  setStatus("New tape secret saved here. Copy the npm command and restart the server so both sides match.", "ok");
-});
-
-document.getElementById("copySecret").addEventListener("click", async () => {
-  const secret = secretValue();
-  if (!secret) {
-    setStatus("Mint a secret or paste the one from the npm run tape terminal.", "bad");
-    return;
-  }
-  await navigator.clipboard.writeText(secret);
-  if (!(await save())) return;
-  setStatus("Secret copied.", "ok");
-});
-
-document.getElementById("copyCmd").addEventListener("click", async () => {
-  if (!secretValue()) document.getElementById("tapeSecret").value = mintSecret();
-  if (!(await save())) return;
-  await navigator.clipboard.writeText(npmCommand());
-  setStatus("Copied. Run it in the grail-velocity folder, the one with package.json.", "ok");
-});
 
 document.getElementById("check").addEventListener("click", async () => {
   if (!(await save())) return;

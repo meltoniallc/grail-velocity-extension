@@ -2,15 +2,15 @@ Grail Velocity v2.1.0 — Fast-Cash is sold tape only. Capture records pages you
 
 Build (from repo root):
   npm run package
-  → dist/grail-velocity-extension.zip
+  → dist/grail-velocity-2.1.0-meltonia.zip
 
-1. Unzip grail-velocity-extension.zip
+1. Unzip grail-velocity-2.1.0-meltonia.zip
 2. Open the grail-velocity folder. manifest.json must sit next to background.js
 3. chrome://extensions → Developer mode ON → Load unpacked → that folder
    Not the zip. Not grok-workspace. Not Downloads.
 4. Pin it. Stay signed into eBay.
-5. Options: seller HMAC secret (stays on this machine), pause list, tape API.
-   Popup: Capture on/off, eBay toggle, Pause 1 hour. Checkout, messages, and My eBay start paused.
+5. Options: Use Railway Tape → paste Tape secret → Check connection.
+   One auto-capture switch. Popup still has Pause 1 hour. Checkout, messages, and My eBay stay paused.
 6. Any eBay tab → overlay → Scrape this page (live, listing, or solds).
    Chip must say TAPE before you Apply. Live asks never set Fast-Cash.
 7. Book ref is catalog, not this page. Do not apply it.

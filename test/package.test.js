@@ -15,7 +15,8 @@ const {
 test("package builds zip with grail-velocity/manifest.json and all runtime files", () => {
   const result = packageExtension();
   assert.equal(result.zipPath, ZIP);
-  assert.ok(fs.existsSync(ZIP), "dist/grail-velocity-extension.zip missing");
+  assert.ok(fs.existsSync(ZIP), "dist/grail-velocity-2.1.0-meltonia.zip missing");
+  assert.match(path.basename(ZIP), /^grail-velocity-2\.1\.0-meltonia\.zip$/);
 
   const names = listZipNames(ZIP);
   assert.ok(names.includes("grail-velocity/manifest.json"));

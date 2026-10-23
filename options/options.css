@@ -4,9 +4,34 @@ html {
   background: var(--void);
 }
 body {
-  width: min(440px, 100%);
+  width: min(400px, 100%);
   min-height: 100%;
 }
+
+.opts-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 14px 2px;
+}
+.opts-head .brand {
+  margin: 0;
+  font-family: "Bebas Neue", sans-serif;
+  font-size: 18px;
+  font-weight: 400;
+  letter-spacing: 0.04em;
+  line-height: 1.1;
+  color: var(--platinum);
+}
+.opts-head .ver {
+  margin: 0;
+  font-family: "DM Mono", ui-monospace, monospace;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+
 #opts {
   padding: 0 14px 16px;
   display: grid;
@@ -21,24 +46,45 @@ body {
   color: var(--muted);
 }
 .help { margin: 0 14px; }
-.row, .row3 { display: grid; gap: 8px; }
-.row { grid-template-columns: 1fr 1fr; }
-.row3 { grid-template-columns: 1fr 1fr 1fr; }
+.help.lead { margin: 0 14px 8px; font-size: 12px; line-height: 1.4; }
+.help.tight { margin: 0; font-size: 12px; line-height: 1.4; }
+.row { display: grid; gap: 8px; grid-template-columns: 1fr 1fr; }
 #status { margin: 0; min-height: 1.2em; color: var(--muted); }
 #status.ok { color: var(--teal); }
 #status.bad { color: var(--danger); }
 code { font-family: "DM Mono", ui-monospace, monospace; font-size: 12px; }
 h2 {
-  margin: 8px 0 0;
+  margin: 10px 0 0;
   font-family: "Bebas Neue", sans-serif;
-  font-size: 22px;
+  font-size: 16px;
   font-weight: 400;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.06em;
+  color: var(--muted);
 }
-#syncStatus { margin: 4px 14px 0; }
+#syncStatus { margin: 4px 0 0; }
 #syncStatus.ok { color: var(--teal); }
 #syncStatus.bad { color: var(--danger); }
 #syncStatus.idle { color: var(--muted); }
+
+.tools {
+  margin-top: 8px;
+  padding: 8px 0 0;
+  border-top: 1px solid var(--line);
+}
+.tools summary {
+  cursor: pointer;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  list-style: none;
+}
+.tools summary::-webkit-details-marker { display: none; }
+.tools[open] summary { color: var(--platinum); margin-bottom: 8px; }
+.tools .field { margin-top: 6px; }
+.tools .row { margin-top: 8px; }
+.tools #pull { width: 100%; margin-top: 6px; }
+
 .scratch-list { list-style: none; margin: 8px 0 0; padding: 0; max-height: 220px; overflow: auto; display: grid; gap: 6px; }
 .scratch-list li { font-size: 12px; line-height: 1.4; color: var(--fg); padding: 6px 8px; background: var(--raised); border-radius: 4px; }
 .scratch-list .bucket { display: inline-block; min-width: 5.5em; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }

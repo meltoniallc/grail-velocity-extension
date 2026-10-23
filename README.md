@@ -11,8 +11,8 @@ Chromium MV3 overlay. Reads eBay sold tape as you. Fast-Cash is **sold tape only
 **v2.0.3** — Options **Use Railway Tape** preset (`https://tape-production-2810.up.railway.app`), desk SYNC FAIL banner, cliff → Inspect scratch.
 
 - Auto-capture once per page view on item (`/itm/`), sold search (`LH_Sold=1`), and active search. It does not crawl, paginate, or open tabs.
-- One parser per page type. Seller names are stored only as HMAC-SHA256 with a secret you set in Options.
-- Popup: global capture, eBay toggle, pause list, pause 1 hour, today's count, queue, server status, quick comp lookup.
+- One parser per page type. Seller usernames are hashed only when a seller HMAC secret is already in storage (not exposed in Options).
+- Popup: capture toggle, eBay toggle, pause 1 hour, today's count, queue, server status, quick comp lookup.
 - Limits: 1 capture per URL per 10 minutes, 300 captures per hour. The outbox is IndexedDB. `POST /observe` writes Postgres when `DATABASE_URL` is set and SQLite when it is not.
 - Fast-Cash chip says **TAPE** or **NO TAPE**. Catalog book price is labeled Book ref and cannot be Applied.
 - Auto-capture (preference-gated) + capture meta; Continue solds pagination on sold search only.
@@ -29,16 +29,15 @@ Chromium MV3 overlay. Reads eBay sold tape as you. Fast-Cash is **sold tape only
 
 ## Load unpacked
 
-1. Download: https://github.com/meltoniallc/grail-velocity-extension/releases/latest/download/grail-velocity-extension.zip
-   Or from a checkout: `npm run package` → `dist/grail-velocity-extension.zip`
+1. Download a Release asset named `grail-velocity-2.1.0-meltonia.zip` when published, or from a checkout: `npm run package` → `dist/grail-velocity-2.1.0-meltonia.zip`
 2. Unzip. Open the `grail-velocity` folder (`manifest.json` must be in it).
 3. chrome://extensions → Developer mode → Load unpacked → that folder.
-4. Pin the icon. Open Options and set the seller HMAC secret if you want seller hashes. Leave it blank and captures still save, without a seller hash.
-5. Popup: Capture and eBay default on. Pause 1 hour stops capture. Checkout, messages, and My eBay are on the pause list.
+4. Pin the icon. Options → **Use Railway Tape** → paste Tape secret → **Check connection**. Zero-config otherwise (auto-capture on).
+5. Popup: Capture and eBay default on. Pause 1 hour stops capture. Checkout, messages, and My eBay stay on the built-in pause list.
 
 ## Compliance
 
-Capture only pages the user personally views. The extension does not crawl, schedule background fetches of eBay, or turn pages on its own. That limit follows the eBay User Agreement, which prohibits robots, spiders, scrapers, and other automated means of accessing eBay without eBay's permission (https://www.ebay.com/help/policies/member-behaviour-policies/user-agreement?id=4259). Turn capture off in the popup. The seller HMAC secret stays in extension storage.
+Capture only pages the user personally views. The extension does not crawl, schedule background fetches of eBay, or turn pages on its own. That limit follows the eBay User Agreement, which prohibits robots, spiders, scrapers, and other automated means of accessing eBay without eBay's permission (https://www.ebay.com/help/policies/member-behaviour-policies/user-agreement?id=4259). Turn capture off in the popup or Options auto-capture switch.
 
 ## What the numbers are
 
