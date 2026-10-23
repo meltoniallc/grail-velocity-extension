@@ -7,7 +7,7 @@ const zlib = require("node:zlib");
 const ROOT = path.resolve(__dirname, "..");
 const OUT_DIR = path.join(ROOT, "dist");
 const STAGE = path.join(OUT_DIR, "grail-velocity");
-const ZIP = path.join(OUT_DIR, "grail-velocity-extension.zip");
+const ZIP = path.join(OUT_DIR, "grail-velocity-2.1.0-meltonia.zip");
 
 /** Runtime files required to load-unpacked per INSTALL / manifest. */
 const INCLUDE = [
