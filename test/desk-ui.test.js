@@ -11,9 +11,9 @@ function read(rel) {
   return fs.readFileSync(path.join(ROOT, rel), "utf8");
 }
 
-test("extension is 2.0.3 and the desk uses the Meltonia palette", () => {
+test("extension is 2.0.4 and the desk uses the Meltonia palette", () => {
   const manifest = JSON.parse(read("manifest.json"));
-  assert.equal(manifest.version, "2.0.3");
+  assert.equal(manifest.version, "2.0.4");
   assert.ok(manifest.permissions.includes("alarms"));
   const css = read("popup/popup.css") + read("options/options.css") + read("sidepanel/sidepanel.css");
   assert.match(css, /#050505/);

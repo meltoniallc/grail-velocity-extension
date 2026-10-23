@@ -182,10 +182,51 @@ test("desk empty states align watching / NO TAPE / cliff copy", () => {
   assert.equal(GV.deskStatusLine("scraped"), "scraped");
   assert.equal(GV.deskStatusLine({ scraping: true }), "watching solds…");
   assert.equal(GV.deskStatusLine({ nCliff: 2 }), "cliff — junk parked in scratch");
-  assert.equal(GV.deskNoTapeLine(), "NO TAPE — open solds or wait for auto-capture");
+  assert.equal(GV.deskNoTapeLine(), "NO TAPE — Get solds (or wait for auto-capture)");
   assert.equal(GV.DESK_EMPTY.watching, "watching solds…");
-  assert.equal(GV.DESK_EMPTY.noTape, "NO TAPE — open solds or wait for auto-capture");
+  assert.equal(GV.DESK_EMPTY.noTape, "NO TAPE — Get solds (or wait for auto-capture)");
   assert.equal(GV.DESK_EMPTY.cliff, "cliff — junk parked in scratch");
+});
+
+test("planGetSolds scrapes on matching sold page and navigates otherwise", () => {
+  const q = "2023-24 Topps Mercury Victor Wembanyama #5 Refractor 74/99";
+  const soldHref = GV.soldUrl(q);
+  const scrape = GV.planGetSolds({ query: q, pageMode: "sold", href: soldHref });
+  assert.equal(scrape.action, "scrape");
+  const live = GV.planGetSolds({
+    query: q,
+    pageMode: "live",
+    href: "https://www.ebay.com/sch/i.html?_nkw=" + encodeURIComponent(q),
+  });
+  assert.equal(live.action, "navigate");
+  assert.match(live.url, /LH_Sold=1/);
+  assert.match(live.url, /Mercury/);
+  assert.equal(GV.planGetSolds({ query: "" }).action, "noop");
+  const otherSold = GV.planGetSolds({
+    query: q,
+    pageMode: "sold",
+    href: GV.soldUrl("completely different card"),
+  });
+  assert.equal(otherSold.action, "navigate");
+});
+
+test("consumeGetSoldsPending clears matching fresh flag only", () => {
+  const bag = new Map();
+  const store = {
+    getItem: (k) => (bag.has(k) ? bag.get(k) : null),
+    setItem: (k, v) => bag.set(k, v),
+    removeItem: (k) => bag.delete(k),
+  };
+  const q = "Mercury #5 Refractor";
+  const now = 1_000_000;
+  store.setItem(GV.GET_SOLDS_PENDING_KEY, GV.encodeGetSoldsPending(q, now - 1_000));
+  assert.equal(GV.consumeGetSoldsPending(store, q, now), q);
+  assert.equal(store.getItem(GV.GET_SOLDS_PENDING_KEY), null);
+  store.setItem(GV.GET_SOLDS_PENDING_KEY, GV.encodeGetSoldsPending(q, now - 120_000));
+  assert.equal(GV.consumeGetSoldsPending(store, q, now), null);
+  store.setItem(GV.GET_SOLDS_PENDING_KEY, GV.encodeGetSoldsPending(q, now));
+  assert.equal(GV.consumeGetSoldsPending(store, "other query", now), null);
+  assert.ok(store.getItem(GV.GET_SOLDS_PENDING_KEY));
 });
 
 test("formatTapeSync surfaces OK / fail / idle for Options and overlay", () => {
@@ -281,6 +322,11 @@ test("content script and side panel call extracted overlay helpers", () => {
   assert.match(ebay, /GV\.captureStatus\(/);
   assert.match(ebay, /GV\.deskStatusLine\(/);
   assert.match(ebay, /GV\.deskNoTapeLine\(/);
+  assert.match(ebay, /data-act="get-solds"/);
+  assert.match(ebay, /Get solds/);
+  assert.match(ebay, /GV\.planGetSolds\(/);
+  assert.match(ebay, /GV\.consumeGetSoldsPending\(/);
+  assert.match(ebay, /runGetSolds/);
   assert.match(ebay, /GV\.formatTapeSync\(/);
   assert.match(ebay, /data-capture-status/);
   assert.match(ebay, /data-tape-sync/);
@@ -325,6 +371,7 @@ test("content script and side panel call extracted overlay helpers", () => {
   assert.equal(/Side panel · book/.test(panelHtml), false);
   assert.match(panelHtml, /Fast-Cash is sold tape only/);
   const overlayCss = fs.readFileSync(path.join(__dirname, "../content/overlay.css"), "utf8");
+  assert.match(overlayCss, /\.gv-btn\.get-solds/);
   assert.match(overlayCss, /\.gv-role-tape/);
   assert.match(overlayCss, /\.gv-role-ask/);
   assert.match(overlayCss, /\.gv-role-book/);
@@ -343,7 +390,7 @@ test("content script and side panel call extracted overlay helpers", () => {
   {
     const hitBlock = ebay.match(/if \(act === "hit"\) \{[\s\S]*?\n    \}/);
     assert.ok(hitBlock, "hit handler present");
-    assert.equal(/soldUrl|tabs\.create|location\.href/.test(hitBlock[0]), false);
+    assert.equal(/soldUrl|tabs\.create|location\.href|get-solds|runGetSolds/.test(hitBlock[0]), false);
   }
   assert.deepEqual(manifest.content_scripts[0].js, [
     "lib/core.js",

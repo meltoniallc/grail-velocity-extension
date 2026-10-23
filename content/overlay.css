@@ -234,6 +234,8 @@
 .gv-btn.ghost { background: transparent; color: var(--fg); box-shadow: inset 0 0 0 1px var(--border); }
 .gv-btn.wide { grid-column: 1 / -1; height: 44px; background: transparent; color: var(--muted); }
 .gv-btn.scrape { grid-column: 1 / -1; }
+.gv-btn.get-solds { grid-column: 1 / -1; }
+.gv-btn.ghost.scrape { grid-column: 1 / -1; opacity: 0.85; font-weight: 400; }
 .gv-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 .gv-empty { margin: 12px 0 0; font-size: 13px; color: var(--muted); line-height: 1.45; }
 .gv-dock {
